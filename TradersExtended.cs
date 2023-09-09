@@ -48,6 +48,8 @@ namespace TradersExtended
 
         private static DirectoryInfo pluginFolder;
 
+        private float m_leftClickTime;
+
         [Serializable]
         public class TradeableItem
         {
@@ -272,7 +274,7 @@ namespace TradersExtended
                 {
                     OnSelectedItem(element);
                 });
-
+                
                 sellItemList.Add(element);
             }
 
@@ -379,9 +381,7 @@ namespace TradersExtended
 
                 logger.LogInfo($"Found {file.FullName}");
 
-                string trader = filename[2].ToLower();
-
-                string listKey = TraderListKey(trader, list);
+                string listKey = TraderListKey(filename[2].ToLower(), list);
 
                 try
                 {
@@ -391,7 +391,37 @@ namespace TradersExtended
                 {
                     logger.LogWarning($"Error reading file ({file.FullName})! Error: {e.Message}");
                 }
+            }
 
+            foreach (string resource in Assembly.GetExecutingAssembly().GetManifestResourceNames())
+            {
+                if (!resource.StartsWith("TradersExtended.Configs.") && !resource.EndsWith(".json"))
+                    continue;
+
+                string[] resName = resource.Replace("TradersExtended.Configs.", "").Replace(".json", "").Split('.');
+
+                if (resName.Length != 2)
+                    continue; 
+                
+                if (!Enum.TryParse(resName[1], true, out ItemsListType listType))
+                    continue;
+
+                string list = TraderListKey(resName[0].ToLower(), listType) + ".internal";
+
+                logger.LogInfo($"Found resource {list}");
+
+                try
+                {
+                    using (Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource))
+                    using (StreamReader reader = new StreamReader(stream))
+                    {
+                        localConfig.Add(list, reader.ReadToEnd());
+                    }
+                }
+                catch (Exception e)
+                {
+                    logger.LogWarning($"Error reading resource ({resource})! Error: {e.Message}");
+                }
             }
 
             configsJSON.AssignLocalValue(localConfig);
