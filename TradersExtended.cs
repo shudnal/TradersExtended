@@ -19,7 +19,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.0.0";
+        private const string pluginVersion = "1.0.1";
 
         private Harmony _harmony;
 
@@ -47,8 +47,6 @@ namespace TradersExtended
         private static readonly CustomSyncedValue<Dictionary<string, string>> configsJSON = new CustomSyncedValue<Dictionary<string, string>>(configSync, "JSON configs", new Dictionary<string, string>());
 
         private static DirectoryInfo pluginFolder;
-
-        private float m_leftClickTime;
 
         [Serializable]
         public class TradeableItem
@@ -346,7 +344,7 @@ namespace TradersExtended
                 SetupConfigWatcher();
             }
         }
-
+    
         private static void SetupConfigWatcher()
         {
             string filter = $"{pluginID}.*.json";
@@ -534,7 +532,7 @@ namespace TradersExtended
         {
             return TraderListKey("common", type);
         }
-
+        
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.FillList))]
         public static class StoreGui_FillList_Patch
         {
