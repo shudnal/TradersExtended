@@ -89,5 +89,8 @@ Create new config file next to dll to add items.
 
 ## Changelog
 
+v 1.0.1
+* option to load config stored internally
+
 v 1.0.0
 * Initial release
