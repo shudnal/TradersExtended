@@ -18,6 +18,7 @@ A bit more functional than another "simple" trader mods.
 * server synced config
 * configs saved as JSON files next to dll or in subdirectories
 * configurable items are added to current lists (not replacing current vanilla items)
+* double click on stackable item you want to buy (i.g. Iron pit ) to enter needed items amount
 
 ## Config file names
 * are case insensitive for Windows
@@ -65,11 +66,20 @@ Configs use Boss Keys to filter tradeable item list (https://valheim.fandom.com/
 
 ### Sellable(Sell) list example
 I want to be able to sell a Fishing rod for 200 coins
+I want to be able to sell a stack of Wood for 25 coins after Elder was killed
 ```
 [
   {
     "prefab": "FishingRod", 
-    "price": 200
+    "stack": 1,
+    "price": 200,
+    "requiredGlobalKey": ""
+  },
+  {
+    "prefab": "Wood", 
+    "stack": 50,
+    "price": 25,
+    "requiredGlobalKey": "defeated_gdking"
   },
 ]
 ```
@@ -90,6 +100,10 @@ Create new config file next to dll to add items.
 [Thunderstore](https://valheim.thunderstore.io/package/shudnal/TradersExtended/)
 
 ## Changelog
+
+v 1.0.2
+* double click on stackable item to input needed amount
+* item config unified
 
 v 1.0.1
 * option to load config stored internally
