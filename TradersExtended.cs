@@ -15,11 +15,12 @@ using System.Linq;
 namespace TradersExtended
 {
     [BepInPlugin(pluginID, pluginName, pluginVersion)]
+    [BepInDependency("randyknapp.mods.epicloot", BepInDependency.DependencyFlags.SoftDependency)]
     public class TradersExtended : BaseUnityPlugin
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.0.2";
+        private const string pluginVersion = "1.0.4";
 
         private Harmony _harmony;
 
@@ -60,6 +61,7 @@ namespace TradersExtended
         private static DateTime m_lastSplitInput;
         private static float m_splitNumInputTimeoutSec = 0.5f;
 
+        private static bool epicLootIsAdventureModeEnabled = false;
 
         [Serializable]
         public class TradeableItem
@@ -94,6 +96,18 @@ namespace TradersExtended
             _ = configSync.AddLockingConfigEntry(configLocked);
 
             configsJSON.ValueChanged += new Action(LoadConfigs);
+
+            var EpicLootPlugin = GetComponent("EpicLoot");
+            if (EpicLootPlugin != null)
+            {
+                var EpicLootPluginType = EpicLootPlugin.GetType();
+                var IsAdventureModeEnabledMethod = AccessTools.Method(EpicLootPluginType, "IsAdventureModeEnabled");
+                if (IsAdventureModeEnabledMethod != null)
+                {
+                    epicLootIsAdventureModeEnabled = (bool)MethodInvoker.GetHandler(IsAdventureModeEnabledMethod)(null);
+                    logger.LogInfo($"EpicLoot found. Adventure mode: {epicLootIsAdventureModeEnabled}");
+                }
+            }
         }
 
         public void Update()
@@ -353,7 +367,7 @@ namespace TradersExtended
                 Image component = element.transform.Find("icon").GetComponent<Image>();
                 component.sprite = tradeItem.m_shared.m_icons[0];
                 string text = Localization.instance.Localize(tradeItem.m_shared.m_name);
-                
+
                 if (ItemStack(tradeItem) > 1)
                 {
                     text = text + " x" + ItemStack(tradeItem);
@@ -440,6 +454,7 @@ namespace TradersExtended
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Awake))]
         public static class StoreGui_Awake_Patch
         {
+            [HarmonyPriority(Priority.Last)]
             static void Postfix(StoreGui __instance)
             {
                 if (!modEnabled.Value) return;
@@ -489,6 +504,13 @@ namespace TradersExtended
                 {
                     CloseAmountDialog();
                 });
+
+                if (epicLootIsAdventureModeEnabled)
+                {
+                    Vector3 storePos = __instance.m_rootPanel.transform.localPosition;
+                    storePos.x -= 100;
+                    __instance.m_rootPanel.transform.localPosition = storePos;
+                }
 
                 logger.LogInfo($"StoreGui panel patched");
 
@@ -878,5 +900,40 @@ namespace TradersExtended
             }
         }
 
+        [HarmonyPatch(typeof(Terminal), nameof(Terminal.InitTerminal))]
+        public static class Terminal_Patch
+        {
+            public static void Postfix()
+            {
+                new Terminal.ConsoleCommand("tradersextendedsave", "Save every item from ObjectDB into file ObjectDB.list.json next to dll", args =>
+                {
+                    SaveFromObjectDB(args.Context);
+                });
+            }
+
+            public static void SaveFromObjectDB(Terminal context)
+            {
+                List<TradeableItem> allItems = new List<TradeableItem>();
+                foreach (GameObject prefab in ObjectDB.instance.m_items)
+                {
+                    if (!prefab.TryGetComponent<ItemDrop>(out ItemDrop itemDrop))
+                        continue;
+
+                    allItems.Add(new TradeableItem()
+                    {
+                        prefab = prefab.name,
+                        price = Math.Max(itemDrop.m_itemData.m_shared.m_value, 1)
+                    });
+                }
+
+                string JSON = JsonConvert.SerializeObject(allItems, Formatting.Indented);
+
+                string filename = Path.Combine(pluginFolder.FullName, "ObjectDB.list.json");
+
+                File.WriteAllText(filename, JSON);
+
+                context.AddString($"Saved {allItems.Count} items to {filename}");
+            }
+        }
     }
 }

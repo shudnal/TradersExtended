@@ -99,6 +99,12 @@ Create new config file next to dll to add items.
 
 ## Changelog
 
+v 1.0.4
+* tradersextendedsave command to save all items from ObjectDB
+
+1.0.3
+* better positioning for EpicLoot Adventure mode
+
 v 1.0.2
 * double click on stackable item to input needed amount
 * item config unified
