@@ -99,6 +99,9 @@ Create new config file next to dll to add items.
 
 ## Changelog
 
+v 1.0.6
+* patch 0.217.22, server sync fix
+
 v 1.0.5
 * patch 0.217.22
 
