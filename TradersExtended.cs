@@ -11,6 +11,7 @@ using System.IO;
 using System;
 using Newtonsoft.Json;
 using System.Linq;
+using TMPro;
 
 namespace TradersExtended
 {
@@ -21,7 +22,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.0.6";
+        private const string pluginVersion = "1.0.8";
 
         private Harmony _harmony;
 
@@ -54,8 +55,8 @@ namespace TradersExtended
         private static float m_leftClickTime;
         private static GameObject amountDialog;
         private static Slider sliderDialog;
-        private static Text sliderTitle;
-        private static Text sliderAmountText;
+        private static TMP_Text sliderTitle;
+        private static TMP_Text sliderAmountText;
         private static Image sliderImage;
 
         private static string m_splitInput = "";
@@ -374,10 +375,10 @@ namespace TradersExtended
                     text = text + " x" + ItemStack(tradeItem);
                 }
 
-                Text component2 = element.transform.Find("name").GetComponent<Text>();
+                TMP_Text component2 = element.transform.Find("name").GetComponent<TMP_Text>();
                 component2.text = text;
                 element.GetComponent<UITooltip>().Set(tradeItem.m_shared.m_name, tradeItem.GetTooltip(), __instance.m_tooltipAnchor);
-                Text component3 = Utils.FindChild(element.transform, "price").GetComponent<Text>();
+                TMP_Text component3 = Utils.FindChild(element.transform, "price").GetComponent<TMP_Text>();
                 component3.text = ItemPrice(tradeItem).ToString();
 
                 element.GetComponent<Button>().onClick.AddListener(delegate
@@ -404,7 +405,7 @@ namespace TradersExtended
                     coins += ItemPrice(tradeItem) * Mathf.CeilToInt(Player.m_localPlayer.GetInventory().CountItems(tradeItem.m_shared.m_name) / ItemStack(tradeItem));
             }
 
-            sellPanel.transform.Find("coins").Find("coins").GetComponent<Text>().text = coins.ToString();
+            sellPanel.transform.Find("coins").Find("coins").GetComponent<TMP_Text>().text = coins.ToString();
 
             sellButton.interactable = selectedItem != null;
         }
@@ -468,7 +469,7 @@ namespace TradersExtended
                 Destroy(sellPanel.transform.Find("topic").gameObject);
                 Destroy(sellPanel.transform.Find("bkg").gameObject);
 
-                sellPanel.transform.Find("BuyButton").Find("Text").GetComponent<Text>().text = Localization.instance.Localize("$store_sell");
+                sellPanel.transform.Find("BuyButton").Find("Text").GetComponent<TMP_Text>().text = Localization.instance.Localize("$store_sell");
 
                 sellButton = sellPanel.transform.Find("BuyButton").GetComponent<Button>();
 
@@ -486,9 +487,9 @@ namespace TradersExtended
 
                 Transform win_bkg = amountDialog.transform.Find("win_bkg");
 
-                sliderTitle = win_bkg.Find("Text").GetComponent<Text>();
+                sliderTitle = win_bkg.Find("Text").GetComponent<TMP_Text>();
                 sliderDialog = win_bkg.Find("Slider").GetComponent<Slider>();
-                sliderAmountText = win_bkg.Find("amount").GetComponent<Text>();
+                sliderAmountText = win_bkg.Find("amount").GetComponent<TMP_Text>();
                 sliderImage = win_bkg.Find("Icon_bkg").Find("Icon").GetComponent<Image>();
 
                 sliderDialog.onValueChanged.AddListener(delegate
@@ -811,59 +812,45 @@ namespace TradersExtended
             {
                 if (!modEnabled.Value) return;
 
-                string listKey = CommonListKey(ItemsListType.Buy);
+                AddAvailableItems(CommonListKey(ItemsListType.Buy), ref __result);
 
-                if (tradeableItems.ContainsKey(listKey))
-                    foreach (TradeableItem item in tradeableItems[listKey])
+                AddAvailableItems(TraderListKey(__instance.m_name, ItemsListType.Buy), ref __result);
+
+            }
+        }
+
+        private static void AddAvailableItems(string listKey, ref List<Trader.TradeItem> __result)
+        {
+            if (tradeableItems.ContainsKey(listKey))
+                foreach (TradeableItem item in tradeableItems[listKey])
+            {
+                if (string.IsNullOrEmpty(item.requiredGlobalKey) || ZoneSystem.instance.GetGlobalKey(item.requiredGlobalKey))
+                {
+                    GameObject itemPrefab = ObjectDB.instance.GetItemPrefab(item.prefab);
+
+                    if (itemPrefab == null)
+                        continue;
+
+                    ItemDrop prefab = itemPrefab.GetComponent<ItemDrop>();
+
+                    if (__result.Exists(x => x.m_prefab == prefab))
                     {
-                        if (string.IsNullOrEmpty(item.requiredGlobalKey) || ZoneSystem.instance.GetGlobalKey(item.requiredGlobalKey))
-                        {
-                            GameObject itemPrefab = ObjectDB.instance.GetItemPrefab(item.prefab);
-
-                            if (itemPrefab == null)
-                                continue;
-
-                            ItemDrop prefab = itemPrefab.GetComponent<ItemDrop>();
-
-                            if (__result.Exists(x => x.m_prefab == prefab))
-                                continue;
-
-                            __result.Add(new Trader.TradeItem
-                            {
-                                m_prefab = prefab,
-                                m_price = item.price,
-                                m_stack = item.stack,
-                                m_requiredGlobalKey = item.requiredGlobalKey
-                            });
-                        }
+                        Trader.TradeItem itemTrader = __result.First(x => x.m_prefab == prefab);
+                        itemTrader.m_price = item.price;
+                        itemTrader.m_stack = item.stack;
+                        itemTrader.m_requiredGlobalKey = item.requiredGlobalKey;
                     }
-
-                listKey = TraderListKey(__instance.m_name, ItemsListType.Buy);
-
-                if (tradeableItems.ContainsKey(listKey))
-                    foreach (TradeableItem item in tradeableItems[listKey])
+                    else
                     {
-                        if (string.IsNullOrEmpty(item.requiredGlobalKey) || ZoneSystem.instance.GetGlobalKey(item.requiredGlobalKey))
+                        __result.Add(new Trader.TradeItem
                         {
-                            GameObject itemPrefab = ObjectDB.instance.GetItemPrefab(item.prefab);
-
-                            if (itemPrefab == null)
-                                continue;
-
-                            ItemDrop prefab = itemPrefab.GetComponent<ItemDrop>();
-
-                            if (__result.Exists(x => x.m_prefab == prefab))
-                                continue;
-
-                            __result.Add(new Trader.TradeItem
-                            {
-                                m_prefab = prefab,
-                                m_price = item.price,
-                                m_stack = item.stack,
-                                m_requiredGlobalKey = item.requiredGlobalKey
-                            });
-                        }
+                            m_prefab = prefab,
+                            m_price = item.price,
+                            m_stack = item.stack,
+                            m_requiredGlobalKey = item.requiredGlobalKey
+                        });
                     }
+                }
             }
         }
 

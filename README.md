@@ -101,6 +101,12 @@ Create new config file next to dll to add items.
 
 ## Changelog
 
+v 1.0.8
+* fixed not setting trade item values on vanilla items
+
+v 1.0.7
+* patch 0.217.22, text field fix
+
 v 1.0.6
 * patch 0.217.22, server sync fix
 
