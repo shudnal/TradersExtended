@@ -6,7 +6,7 @@
             <InputAssemblies Include="$(OutputPath)ServerSync.dll" />
 			<InputAssemblies Include="$(OutputPath)Newtonsoft.Json.dll" />
 		</ItemGroup>
-        <ILRepack Parallel="true" DebugInfo="true" Internalize="true" InputAssemblies="@(InputAssemblies)" OutputFile="$(OutputPath)\$(ProjectName)\$(TargetFileName)" TargetKind="SameAsPrimaryAssembly" LibraryPath="$(OutputPath)" />
 		<ILRepack Parallel="true" DebugInfo="false" Internalize="true" InputAssemblies="@(InputAssemblies)" OutputFile="F:\Steam\steamapps\common\Valheim\BepInEx\plugins\$(ProjectName)\$(TargetFileName)" TargetKind="SameAsPrimaryAssembly" LibraryPath="$(OutputPath)" />
+		<ILRepack Parallel="true" DebugInfo="true" Internalize="true" InputAssemblies="@(InputAssemblies)" OutputFile="$(OutputPath)\$(ProjectName)\$(TargetFileName)" TargetKind="SameAsPrimaryAssembly" LibraryPath="$(OutputPath)" />
 	</Target>
 </Project>
