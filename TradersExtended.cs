@@ -22,7 +22,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.0.8";
+        private const string pluginVersion = "1.0.9";
 
         private Harmony _harmony;
 
@@ -623,7 +623,7 @@ namespace TradersExtended
 
             int itemsCount = sellableItems[listKey].Count;
 
-            List<TradeableItem> items = valuableItems.Concat(sellableItems[listKey]).GroupBy(item => item.prefab).Select(g => g.First()).ToList();
+            List<TradeableItem> items = valuableItems.Concat(sellableItems[listKey]).GroupBy(item => item.prefab).Select(g => g.Last()).ToList();
 
             logger.LogInfo($"Loaded {items.Count - itemsCount} common valuable items from ObjectDB");
 

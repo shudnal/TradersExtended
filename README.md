@@ -101,6 +101,9 @@ Create new config file next to dll to add items.
 
 ## Changelog
 
+v 1.0.9
+* fixed not setting sellable item values on vanilla items
+
 v 1.0.8
 * fixed not setting trade item values on vanilla items
 
