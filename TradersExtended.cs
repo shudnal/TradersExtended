@@ -22,7 +22,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.0.9";
+        private const string pluginVersion = "1.0.11";
 
         private Harmony _harmony;
 
@@ -340,11 +340,11 @@ namespace TradersExtended
             m_tempItems.Clear();
             m_tempItemsPrice.Clear();
 
-            if (sellableItems.ContainsKey(CommonListKey(ItemsListType.Sell)))
-                sellableItems[CommonListKey(ItemsListType.Sell)].ForEach(item => AddItemToSellList(item));
-
             if (sellableItems.ContainsKey(TraderListKey(__instance.m_trader.m_name, ItemsListType.Sell)))
                 sellableItems[TraderListKey(__instance.m_trader.m_name, ItemsListType.Sell)].ForEach(item => AddItemToSellList(item));
+
+            if (sellableItems.ContainsKey(CommonListKey(ItemsListType.Sell)))
+                sellableItems[CommonListKey(ItemsListType.Sell)].ForEach(item => AddItemToSellList(item));
 
             if (__instance.m_coinPrefab != null)
             {

@@ -99,6 +99,9 @@ Create new config file next to dll to add items.
 
 ## Changelog
 
+v 1.0.11
+* another fix for lists priority
+
 v 1.0.9
 * fixed not setting sellable item values on vanilla items
 
@@ -117,7 +120,7 @@ v 1.0.5
 v 1.0.4
 * tradersextendedsave command to save all items from ObjectDB
 
-1.0.3
+v 1.0.3
 * better positioning for EpicLoot Adventure mode
 
 v 1.0.2
