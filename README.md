@@ -101,6 +101,9 @@ Create new config file next to dll to add items.
 
 ## Changelog
 
+v 1.0.12
+* fix for new bepinex
+
 v 1.0.11
 * another fix for lists priority
 
