@@ -99,6 +99,9 @@ Create new config file next to dll to add items.
 
 ## Changelog
 
+v 1.0.13
+* proper fix for new bepinex
+
 v 1.0.12
 * fix for new bepinex
 
