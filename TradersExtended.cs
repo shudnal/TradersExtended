@@ -22,7 +22,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.0.13";
+        private const string pluginVersion = "1.0.14";
 
         private Harmony _harmony;
 
@@ -378,7 +378,7 @@ namespace TradersExtended
                 TMP_Text component2 = element.transform.Find("name").GetComponent<TMP_Text>();
                 component2.text = text;
                 element.GetComponent<UITooltip>().Set(tradeItem.m_shared.m_name, tradeItem.GetTooltip(), __instance.m_tooltipAnchor);
-                TMP_Text component3 = Utils.FindChild(element.transform, "price").GetComponent<TMP_Text>();
+                TMP_Text component3 = element.transform.Find("price").GetComponent<TMP_Text>();
                 component3.text = ItemPrice(tradeItem).ToString();
 
                 element.GetComponent<Button>().onClick.AddListener(delegate
