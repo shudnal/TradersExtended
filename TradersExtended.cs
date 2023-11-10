@@ -22,7 +22,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.0.14";
+        private const string pluginVersion = "1.0.15";
 
         private Harmony _harmony;
 
@@ -326,25 +326,36 @@ namespace TradersExtended
 
         public static void FillSellableList(StoreGui __instance)
         {
+            logger.LogInfo($"sellItemList {sellItemList.Count}");
+
             foreach (GameObject item in sellItemList)
             {
-                Destroy(item);
+                UnityEngine.Object.Destroy(item);
             }
             sellItemList.Clear();
 
             Transform items = sellPanel.transform.Find("ItemList").Find("Items");
 
+            logger.LogInfo($"items {items.name}");
+
             RectTransform m_listRoot = items.Find("ListRoot").GetComponent<RectTransform>();
             GameObject m_listElement = items.Find("ItemElement").gameObject;
 
+            logger.LogInfo($"m_listRoot {m_listRoot}");
+            logger.LogInfo($"m_listElement {m_listElement}");
+
+            logger.LogInfo($"Was m_tempItems {m_tempItems.Count} m_tempItemsPrice {m_tempItemsPrice.Count}");
+
             m_tempItems.Clear();
             m_tempItemsPrice.Clear();
-
+            
             if (sellableItems.ContainsKey(TraderListKey(__instance.m_trader.m_name, ItemsListType.Sell)))
                 sellableItems[TraderListKey(__instance.m_trader.m_name, ItemsListType.Sell)].ForEach(item => AddItemToSellList(item));
 
             if (sellableItems.ContainsKey(CommonListKey(ItemsListType.Sell)))
                 sellableItems[CommonListKey(ItemsListType.Sell)].ForEach(item => AddItemToSellList(item));
+
+            logger.LogInfo($"Now m_tempItems {m_tempItems.Count} m_tempItemsPrice {m_tempItemsPrice.Count}");
 
             if (__instance.m_coinPrefab != null)
             {
@@ -378,7 +389,7 @@ namespace TradersExtended
                 TMP_Text component2 = element.transform.Find("name").GetComponent<TMP_Text>();
                 component2.text = text;
                 element.GetComponent<UITooltip>().Set(tradeItem.m_shared.m_name, tradeItem.GetTooltip(), __instance.m_tooltipAnchor);
-                TMP_Text component3 = element.transform.Find("price").GetComponent<TMP_Text>();
+                TMP_Text component3 = element.transform.Find("coin_bkg").Find("price").GetComponent<TMP_Text>();
                 component3.text = ItemPrice(tradeItem).ToString();
 
                 element.GetComponent<Button>().onClick.AddListener(delegate
