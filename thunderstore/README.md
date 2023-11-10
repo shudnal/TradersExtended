@@ -99,6 +99,9 @@ Create new config file next to dll to add items.
 
 ## Changelog
 
+v 1.0.16
+* reduced logging messages
+
 v 1.0.15
 * proper fix for new patch
 

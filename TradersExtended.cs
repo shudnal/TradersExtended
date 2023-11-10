@@ -22,7 +22,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.0.15";
+        private const string pluginVersion = "1.0.16";
 
         private Harmony _harmony;
 
@@ -326,8 +326,6 @@ namespace TradersExtended
 
         public static void FillSellableList(StoreGui __instance)
         {
-            logger.LogInfo($"sellItemList {sellItemList.Count}");
-
             foreach (GameObject item in sellItemList)
             {
                 UnityEngine.Object.Destroy(item);
@@ -336,15 +334,8 @@ namespace TradersExtended
 
             Transform items = sellPanel.transform.Find("ItemList").Find("Items");
 
-            logger.LogInfo($"items {items.name}");
-
             RectTransform m_listRoot = items.Find("ListRoot").GetComponent<RectTransform>();
             GameObject m_listElement = items.Find("ItemElement").gameObject;
-
-            logger.LogInfo($"m_listRoot {m_listRoot}");
-            logger.LogInfo($"m_listElement {m_listElement}");
-
-            logger.LogInfo($"Was m_tempItems {m_tempItems.Count} m_tempItemsPrice {m_tempItemsPrice.Count}");
 
             m_tempItems.Clear();
             m_tempItemsPrice.Clear();
@@ -354,8 +345,6 @@ namespace TradersExtended
 
             if (sellableItems.ContainsKey(CommonListKey(ItemsListType.Sell)))
                 sellableItems[CommonListKey(ItemsListType.Sell)].ForEach(item => AddItemToSellList(item));
-
-            logger.LogInfo($"Now m_tempItems {m_tempItems.Count} m_tempItemsPrice {m_tempItemsPrice.Count}");
 
             if (__instance.m_coinPrefab != null)
             {
