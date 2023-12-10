@@ -19,6 +19,7 @@ A bit more functional than another "simple" trader mods.
 * configs saved as JSON files next to dll or in subdirectories
 * configurable items are added to current lists (not replacing current vanilla items)
 * double click on stackable item you want to buy (i.g. Iron pit ) to enter needed items amount
+* use right gamepad stick to scroll sell list. Use (X) to sell selected item (ignore button hint)
 
 ## Config file names
 * are case insensitive for Windows
@@ -100,6 +101,9 @@ Create new config file next to dll to add items.
 [Thunderstore](https://valheim.thunderstore.io/package/shudnal/TradersExtended/)
 
 ## Changelog
+
+v 1.0.17
+* partial gamepad support
 
 v 1.0.16
 * reduced logging messages

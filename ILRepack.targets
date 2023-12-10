@@ -7,7 +7,10 @@
 			<InputAssemblies Include="$(OutputPath)System.Runtime.Serialization.dll" />
 			<InputAssemblies Include="$(OutputPath)Newtonsoft.Json.dll" />
 		</ItemGroup>
-		<ILRepack Parallel="true" DebugInfo="false" Internalize="true" InputAssemblies="@(InputAssemblies)" OutputFile="F:\Steam\steamapps\common\Valheim\BepInEx\plugins\$(ProjectName)\$(TargetFileName)" TargetKind="SameAsPrimaryAssembly" LibraryPath="$(OutputPath)" />
-		<ILRepack Parallel="true" DebugInfo="true" Internalize="true" InputAssemblies="@(InputAssemblies)" OutputFile="$(OutputPath)\$(ProjectName)\$(TargetFileName)" TargetKind="SameAsPrimaryAssembly" LibraryPath="$(OutputPath)" />
+		<ILRepack Parallel="true" DebugInfo="false" Internalize="true" InputAssemblies="@(InputAssemblies)" OutputFile="$(OutputPath)\$(ProjectName)\$(TargetFileName)" TargetKind="SameAsPrimaryAssembly" LibraryPath="$(OutputPath)" />
+	</Target>
+	<Target Name="CopyDLL" AfterTargets="ILRepacker">
+		<Copy SourceFiles="$(OutputPath)\$(ProjectName)\$(TargetFileName)" DestinationFolder="F:\Steam\steamapps\common\Valheim\BepInEx\plugins\$(ProjectName)\" />
+		<Message Text="Copied to plugins folder." Importance="High" />
 	</Target>
 </Project>

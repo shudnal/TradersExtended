@@ -22,7 +22,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.0.16";
+        private const string pluginVersion = "1.0.17";
 
         private Harmony _harmony;
 
@@ -469,9 +469,11 @@ namespace TradersExtended
                 Destroy(sellPanel.transform.Find("topic").gameObject);
                 Destroy(sellPanel.transform.Find("bkg").gameObject);
 
-                sellPanel.transform.Find("BuyButton").Find("Text").GetComponent<TMP_Text>().text = Localization.instance.Localize("$store_sell");
-
-                sellButton = sellPanel.transform.Find("BuyButton").GetComponent<Button>();
+                Transform sellPanelTransform = sellPanel.transform.Find("BuyButton");
+                sellPanelTransform.Find("Text").GetComponent<TMP_Text>().text = Localization.instance.Localize("$store_sell");
+                sellPanelTransform.GetComponent<UIGamePad>().m_zinputKey = "JoyButtonX";
+                
+                sellButton = sellPanelTransform.GetComponent<Button>();
 
                 sellButton.onClick = __instance.m_rootPanel.transform.Find("SellPanel").Find("SellButton").GetComponent<Button>().onClick;
 
@@ -923,5 +925,28 @@ namespace TradersExtended
                 context.AddString($"Saved {allItems.Count} items to {filename}");
             }
         }
+
+        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.UpdateRecipeGamepadInput))]
+        public static class StoreGui_UpdateRecipeGamepadInput_Patch
+        {
+            static void Postfix()
+            {
+                if (!modEnabled.Value) return;
+
+                if (sellItemList.Count > 0)
+                {
+                    if (ZInput.GetButtonDown("JoyRStickDown") || ZInput.GetButtonDown("JoyDPadDown") && ZInput.GetButtonDown("JoyAltPlace"))
+                    {
+                        SelectItem(Mathf.Min(sellItemList.Count - 1, GetSelectedItemIndex() + 1), center: true);
+                    }
+
+                    if (ZInput.GetButtonDown("JoyRStickUp") || ZInput.GetButtonDown("JoyDPadUp") && ZInput.GetButtonDown("JoyAltPlace"))
+                    {
+                        SelectItem(Mathf.Max(0, GetSelectedItemIndex() - 1), center: true);
+                    }
+                }
+            }
+        }
+
     }
 }
