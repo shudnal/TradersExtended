@@ -100,6 +100,9 @@ Create new config file next to dll to add items.
 
 ## Changelog
 
+v 1.0.18
+* patch 0.217.38
+
 v 1.0.17
 * partial gamepad support
 

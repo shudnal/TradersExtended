@@ -91,9 +91,7 @@
     <Content Include="Libs\ServerSync.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
-    <Content Include="Libs\System.Runtime.Serialization.dll">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
+    <None Include="Libs\System.Runtime.Serialization.dll" />
   </ItemGroup>
   <ItemGroup>
     <None Include="ILRepack.targets" />
