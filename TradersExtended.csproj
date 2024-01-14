@@ -101,8 +101,11 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>
-    </PostBuildEvent>
+    <PostBuildEvent>xcopy "$(TargetDir)\$(TargetFileName)" "$(ProjectDir)package\thunderstore\$(SolutionName)\$(SolutionName)\" /q /y /i
+xcopy "$(TargetDir)\ServerSync.dll" "$(ProjectDir)package\thunderstore\$(SolutionName)\$(SolutionName)\" /q /y /i
+xcopy "$(TargetDir)\Newtonsoft.Json.dll" "$(ProjectDir)package\thunderstore\$(SolutionName)\$(SolutionName)\" /q /y /i
+
+if $(ConfigurationName) == Debug (powershell Compress-Archive -Path '$(ProjectDir)\package\thunderstore\$(SolutionName)\*' -DestinationPath '$(ProjectDir)\package\thunderstore\$(SolutionName).zip' -Force)</PostBuildEvent>
   </PropertyGroup>
   <Import Project="packages\ILRepack.Lib.MSBuild.Task.2.0.18.2\build\ILRepack.Lib.MSBuild.Task.targets" Condition="Exists('packages\ILRepack.Lib.MSBuild.Task.2.0.18.2\build\ILRepack.Lib.MSBuild.Task.targets')" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">

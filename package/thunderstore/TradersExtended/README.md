@@ -100,6 +100,9 @@ Create new config file next to dll to add items.
 
 ## Changelog
 
+v 1.0.20
+* thunderstore package restructuring
+
 v 1.0.19
 * colored icons from epic loot
 
