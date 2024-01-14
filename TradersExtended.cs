@@ -22,7 +22,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.0.18";
+        private const string pluginVersion = "1.0.19";
 
         private Harmony _harmony;
 
@@ -63,6 +63,7 @@ namespace TradersExtended
         private static DateTime m_lastSplitInput;
         private static float m_splitNumInputTimeoutSec = 0.5f;
 
+        private static bool epicLootEnabled = false;
         private static bool epicLootIsAdventureModeEnabled = false;
 
         [Serializable]
@@ -100,7 +101,8 @@ namespace TradersExtended
             configsJSON.ValueChanged += new Action(LoadConfigs);
 
             var EpicLootPlugin = GetComponent("EpicLoot");
-            if (EpicLootPlugin != null)
+            epicLootEnabled = EpicLootPlugin != null;
+            if (epicLootEnabled)
             {
                 var EpicLootPluginType = EpicLootPlugin.GetType();
                 var IsAdventureModeEnabledMethod = AccessTools.Method(EpicLootPluginType, "IsAdventureModeEnabled");
@@ -367,7 +369,7 @@ namespace TradersExtended
                 element.SetActive(value: true);
                 (element.transform as RectTransform).anchoredPosition = new Vector2(0f, (float)i * (0f - __instance.m_itemSpacing));
                 Image component = element.transform.Find("icon").GetComponent<Image>();
-                component.sprite = tradeItem.m_shared.m_icons[0];
+                component.sprite = tradeItem.GetIcon();
                 string text = Localization.instance.Localize(tradeItem.m_shared.m_name);
 
                 if (ItemStack(tradeItem) > 1)
@@ -717,9 +719,20 @@ namespace TradersExtended
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.FillList))]
         public static class StoreGui_FillList_Patch
         {
-            static void Postfix(StoreGui __instance)
+            static void Postfix(StoreGui __instance, Trader ___m_trader,  List<GameObject> ___m_itemList)
             {
                 if (!modEnabled.Value) return;
+
+                if (epicLootEnabled)
+                {
+                    List<Trader.TradeItem> itemList = ___m_trader.GetAvailableItems();
+                    if (itemList.Count == ___m_itemList.Count)
+                        for (int i = 0; i < itemList.Count; i++)
+                        {
+                            Image component = ___m_itemList[i].transform.Find("icon").GetComponent<Image>();
+                            component.sprite = itemList[i].m_prefab.m_itemData.GetIcon();
+                        }
+                }
 
                 FillSellableList(__instance);
             }
