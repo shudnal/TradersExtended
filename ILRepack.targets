@@ -19,7 +19,7 @@
 				Overwrite="true"/>
 	</Target>
 	<Target Name="CopyDLLPlugins" AfterTargets="ILRepacker">
-		<Copy SourceFiles="$(TargetPath)" DestinationFolder="F:\Steam\steamapps\common\Valheim\BepInEx\plugins\" />
+		<Copy SourceFiles="$(TargetPath)" DestinationFolder="F:\Steam\steamapps\common\Valheim\BepInEx\plugins\$(SolutionName)\" />
 		<Message Text="Copied to plugins folder." Importance="High" />
 	</Target>
 </Project>
