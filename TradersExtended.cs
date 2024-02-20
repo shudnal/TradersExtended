@@ -22,7 +22,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.0.20";
+        private const string pluginVersion = "1.0.21";
 
         private Harmony _harmony;
 
@@ -562,7 +562,11 @@ namespace TradersExtended
 
                 try
                 {
-                    localConfig.Add(listKey, File.ReadAllText(file.FullName));
+                    using (FileStream fs = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    using (StreamReader reader = new StreamReader(fs))
+                    {
+                        localConfig.Add(listKey, reader.ReadToEnd());
+                    }
                 }
                 catch (Exception e)
                 {
