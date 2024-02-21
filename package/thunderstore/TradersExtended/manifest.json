@@ -1,6 +1,6 @@
 {
   "name": "TradersExtended",
-  "version_number": "1.0.20",
+  "version_number": "1.0.21",
   "website_url": "https://github.com/shudnal/TradersExtended",
   "description": "Trader specific buy and sell lists extended. Store UI extended. Sellable items listed next to tradeable with option to sell exact item.",
   "dependencies": ["denikson-BepInExPack_Valheim-5.4.2202"]

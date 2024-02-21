@@ -1,3 +1,6 @@
+# 1.0.21
+* refinements for shared config files reading
+
 # 1.0.20
 * thunderstore package restructuring
 

@@ -532,6 +532,7 @@ namespace TradersExtended
             fileSystemWatcher1.Changed += new FileSystemEventHandler(ReadConfigs);
             fileSystemWatcher1.Created += new FileSystemEventHandler(ReadConfigs);
             fileSystemWatcher1.Renamed += new RenamedEventHandler(ReadConfigs);
+            fileSystemWatcher1.Deleted += new FileSystemEventHandler(ReadConfigs);
             fileSystemWatcher1.IncludeSubdirectories = true;
             fileSystemWatcher1.SynchronizingObject = ThreadingHelper.SynchronizingObject;
             fileSystemWatcher1.EnableRaisingEvents = true;
@@ -566,6 +567,8 @@ namespace TradersExtended
                     using (StreamReader reader = new StreamReader(fs))
                     {
                         localConfig.Add(listKey, reader.ReadToEnd());
+                        reader.Close();
+                        fs.Dispose();
                     }
                 }
                 catch (Exception e)
@@ -597,6 +600,8 @@ namespace TradersExtended
                     using (StreamReader reader = new StreamReader(stream))
                     {
                         localConfig.Add(list, reader.ReadToEnd());
+                        reader.Close();
+                        stream.Dispose();
                     }
                 }
                 catch (Exception e)
