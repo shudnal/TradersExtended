@@ -5,13 +5,11 @@ using HarmonyLib;
 using System.Reflection;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 using ServerSync;
 using System.IO;
 using System;
 using Newtonsoft.Json;
 using System.Linq;
-using TMPro;
 
 namespace TradersExtended
 {
@@ -22,9 +20,9 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.0.21";
+        private const string pluginVersion = "1.0.22";
 
-        private Harmony _harmony;
+        private Harmony harmony;
 
         internal static readonly ConfigSync configSync = new ConfigSync(pluginID) { DisplayName = pluginName, CurrentVersion = pluginVersion, MinimumRequiredVersion = pluginVersion };
 
@@ -32,51 +30,39 @@ namespace TradersExtended
 
         internal static TradersExtended instance;
 
-        private static ConfigEntry<bool> modEnabled;
+        public static ConfigEntry<bool> modEnabled;
+        private static ConfigEntry<bool> loggingEnabled;
         private static ConfigEntry<bool> configLocked;
 
-        private static GameObject sellPanel;
-        private static Button sellButton;
+        public static ConfigEntry<bool> checkForDiscovery;
+        private static ConfigEntry<string> checkForDiscoveryIgnoreItems;
 
-        private static List<GameObject> sellItemList = new List<GameObject>();
-        private static List<ItemDrop.ItemData> m_tempItems = new List<ItemDrop.ItemData>();
-        private static Dictionary<string, Dictionary<int, int>> m_tempItemsPrice = new Dictionary<string, Dictionary<int, int>>();
+        public static ConfigEntry<bool> traderRepair;
+        public static ConfigEntry<int> traderRepairCost;
+        private static ConfigEntry<string> tradersToRepairWeapons;
+        private static ConfigEntry<string> tradersToRepairArmor;
 
-        private static ItemDrop.ItemData selectedItem;
-        private static int selectedItemIndex = -1;
-
-        private static readonly Dictionary<string, List<TradeableItem>> tradeableItems = new Dictionary<string, List<TradeableItem>>();
-        private static readonly Dictionary<string, List<TradeableItem>> sellableItems = new Dictionary<string, List<TradeableItem>>();
+        public static readonly Dictionary<string, List<TradeableItem>> tradeableItems = new Dictionary<string, List<TradeableItem>>();
+        public static readonly Dictionary<string, List<TradeableItem>> sellableItems = new Dictionary<string, List<TradeableItem>>();
 
         private static readonly CustomSyncedValue<Dictionary<string, string>> configsJSON = new CustomSyncedValue<Dictionary<string, string>>(configSync, "JSON configs", new Dictionary<string, string>());
 
-        private static DirectoryInfo pluginFolder;
+        private static DirectoryInfo pluginDirectory;
+        private static DirectoryInfo configDirectory;
 
-        private static float m_leftClickTime;
-        private static GameObject amountDialog;
-        private static Slider sliderDialog;
-        private static TMP_Text sliderTitle;
-        private static TMP_Text sliderAmountText;
-        private static Image sliderImage;
+        public static Component epicLootPlugin;
 
-        private static string m_splitInput = "";
-        private static DateTime m_lastSplitInput;
-        private static float m_splitNumInputTimeoutSec = 0.5f;
-
-        private static bool epicLootEnabled = false;
-        private static bool epicLootIsAdventureModeEnabled = false;
+        public static HashSet<string> _ignoreItemDiscovery = new HashSet<string>();
+        public static HashSet<string> _tradersToRepairWeapons = new HashSet<string>();
+        public static HashSet<string> _tradersToRepairArmor = new HashSet<string>();
 
         [Serializable]
         public class TradeableItem
         {
             public string prefab;
-
             public int stack = 1;
-
             public int price = 1;
-
             public string requiredGlobalKey = "";
-
         }
 
         public enum ItemsListType
@@ -87,86 +73,32 @@ namespace TradersExtended
 
         internal void Awake()
         {
-            _harmony = Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly(), pluginID);
+            harmony = Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly(), pluginID);
 
             instance = this;
 
             logger = Logger;
 
-            pluginFolder = new DirectoryInfo(Assembly.GetExecutingAssembly().Location).Parent;
+            pluginDirectory = new DirectoryInfo(Assembly.GetExecutingAssembly().Location).Parent;
+            configDirectory = new DirectoryInfo(Paths.ConfigPath).Parent;
 
             ConfigInit();
             _ = configSync.AddLockingConfigEntry(configLocked);
 
             configsJSON.ValueChanged += new Action(LoadConfigs);
 
-            var EpicLootPlugin = GetComponent("EpicLoot");
-            epicLootEnabled = EpicLootPlugin != null;
-            if (epicLootEnabled)
-            {
-                var EpicLootPluginType = EpicLootPlugin.GetType();
-                var IsAdventureModeEnabledMethod = AccessTools.Method(EpicLootPluginType, "IsAdventureModeEnabled");
-                if (IsAdventureModeEnabledMethod != null)
-                {
-                    epicLootIsAdventureModeEnabled = (bool)MethodInvoker.GetHandler(IsAdventureModeEnabledMethod)(null);
-                    logger.LogInfo($"EpicLoot found. Adventure mode: {epicLootIsAdventureModeEnabled}");
-                }
-            }
+            epicLootPlugin = GetComponent("EpicLoot");
         }
 
         public void Update()
         {
-            Player localPlayer = Player.m_localPlayer;
-            if (localPlayer == null || localPlayer.IsDead() || localPlayer.InCutscene() || localPlayer.IsTeleporting())
-            {
-                CloseAmountDialog();
-                return;
-            }
-            UpdateSplitDialog();
+            AmountDialog.Update();
         }
 
-        public void UpdateSplitDialog()
+        public static void LogInfo(object data)
         {
-
-            if (sliderDialog == null) return;
-
-            if (!sliderDialog.gameObject.activeInHierarchy) return;
-
-            for (int i = 0; i < 10; i++)
-            {
-                if (ZInput.GetKeyDown((KeyCode)(256 + i)) || ZInput.GetKeyDown((KeyCode)(48 + i)))
-                {
-                    if (m_lastSplitInput + TimeSpan.FromSeconds(m_splitNumInputTimeoutSec) < DateTime.Now)
-                    {
-                        m_splitInput = "";
-                    }
-
-                    m_lastSplitInput = DateTime.Now;
-                    m_splitInput += i;
-                    if (int.TryParse(m_splitInput, out int result))
-                    {
-                        sliderDialog.value = Mathf.Clamp(result, 1f, sliderDialog.maxValue);
-                        OnSplitSliderChanged();
-                    }
-                }
-            }
-
-            if (ZInput.GetKeyDown(KeyCode.LeftArrow) && sliderDialog.value > 1f)
-            {
-                sliderDialog.value -= 1f;
-                OnSplitSliderChanged();
-            }
-
-            if (ZInput.GetKeyDown(KeyCode.RightArrow) && sliderDialog.value < sliderDialog.maxValue)
-            {
-                sliderDialog.value += 1f;
-                OnSplitSliderChanged();
-            }
-
-            if (ZInput.GetKeyDown(KeyCode.KeypadEnter) || ZInput.GetKeyDown(KeyCode.Return))
-            {
-                BuySelectedItem(StoreGui.instance);
-            }
+            if (loggingEnabled.Value)
+                instance.Logger.LogInfo(data);
         }
 
         private void ConfigInit()
@@ -174,6 +106,22 @@ namespace TradersExtended
             config("General", "NexusID", 2509, "Nexus mod ID for updates", false);
             modEnabled = config("General", "Enabled", defaultValue: true, "Enable this mod. Reload the game to take effect.");
             configLocked = config("General", "Lock Configuration", defaultValue: true, "Configuration is locked and can be changed by server admins only.");
+            loggingEnabled = config("General", "Logging enabled", defaultValue: false, "Enable logging. [Not Synced with Server]", false);
+
+            checkForDiscovery = config("Item discovery", "Sell only discovered items", defaultValue: true, "Trader will not sell items had not discovered by a buyer.");
+            checkForDiscoveryIgnoreItems = config("Item discovery", "Undiscovered items list to sell", defaultValue: "", "Trader will sell items from that list without check for discovery. Vanilla items are included by default.");
+
+            checkForDiscoveryIgnoreItems.SettingChanged += (sender, args) => FillConfigLists();
+
+            traderRepair = config("Trader repair", "Traders can repair items", defaultValue: true, "Traders will have an ability to repair items");
+            tradersToRepairWeapons = config("Trader repair", "Traders capable to repair weapons", defaultValue: "$npc_haldor", "Traders that have an ability to repair weapons");
+            tradersToRepairArmor = config("Trader repair", "Traders capable to repair armor", defaultValue: "$npc_hildir", "Traders that have an ability to repair armor");
+            traderRepairCost = config("Trader repair", "Traders repair cost", defaultValue: 2, "Cost of repair in gold");
+
+            tradersToRepairWeapons.SettingChanged += (sender, args) => FillConfigLists();
+            tradersToRepairArmor.SettingChanged += (sender, args) => FillConfigLists();
+
+            InitCommands();
         }
 
         ConfigEntry<T> config<T>(string group, string name, T defaultValue, ConfigDescription description, bool synchronizedSetting = true)
@@ -188,354 +136,94 @@ namespace TradersExtended
 
         ConfigEntry<T> config<T>(string group, string name, T defaultValue, string description, bool synchronizedSetting = true) => config(group, name, defaultValue, new ConfigDescription(description), synchronizedSetting);
 
-        private void OnDestroy() => _harmony?.UnpatchSelf();
-
-        public static void OnSelectedItem(GameObject button)
+        private void OnDestroy()
         {
-            int index = FindSelectedRecipe(button);
-            SelectItem(index, center: false);
+            Config.Save();
+            instance = null;
+            harmony?.UnpatchSelf();
         }
 
-        public static int FindSelectedRecipe(GameObject button)
+        public static void InitCommands()
         {
-            for (int i = 0; i < sellItemList.Count; i++)
+            new Terminal.ConsoleCommand("tradersextendedsave", "Save every item from ObjectDB into file ObjectDB.list.json next to dll", args =>
             {
-                if (sellItemList[i] == button)
+                SaveFromObjectDB(args.Context);
+            });
+
+            new Terminal.ConsoleCommand("tradersextended", "[action]", delegate (Terminal.ConsoleEventArgs args)
+            {
+                if (args.Length >= 2)
                 {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-
-        public static int GetSelectedItemIndex()
-        {
-            int result = -1;
-            List<ItemDrop.ItemData> availableItems = m_tempItems;
-            for (int i = 0; i < availableItems.Count; i++)
-            {
-                if (availableItems[i] == selectedItem)
-                {
-                    result = i;
-                }
-            }
-
-            return result;
-        }
-
-        public static void SelectItem(int index, bool center)
-        {
-            logger.LogInfo("Setting selected item " + index);
-            for (int i = 0; i < sellItemList.Count; i++)
-            {
-                bool active = i == index;
-                sellItemList[i].transform.Find("selected").gameObject.SetActive(active);
-            }
-
-            if (center && index >= 0)
-            {
-                StoreGui.instance.m_itemEnsureVisible.CenterOnItem(sellItemList[index].transform as RectTransform);
-            }
-
-            if (index < 0)
-            {
-                selectedItem = null;
-            }
-            else
-            {
-                selectedItem = m_tempItems[index];
-            }
-        }
-
-        public static void SellSelectedItem(StoreGui __instance)
-        {
-            if (selectedItem != null)
-            {
-                ItemDrop m_coinPrefab = __instance.m_coinPrefab;
-                if (m_coinPrefab == null)
-                {
-                    logger.LogWarning($"No m_coinPrefab is setted in StoreGui");
-                    return;
-                }
-
-                if (ItemPrice(selectedItem) == 0)
-                    return;
-
-                selectedItemIndex = GetSelectedItemIndex();
-
-                KeyValuePair<int, int> stackPrice = m_tempItemsPrice[selectedItem.m_shared.m_name].First();
-                string text;
-                int stackCoins = stackPrice.Value;
-
-                if (stackPrice.Key == 1)
-                {
-                    stackCoins *= selectedItem.m_stack;
-                    Player.m_localPlayer.GetInventory().RemoveItem(selectedItem);
-                    text = ((selectedItem.m_stack <= 1) ? selectedItem.m_shared.m_name : (selectedItem.m_stack + "x" + selectedItem.m_shared.m_name));
+                    string action = args.FullLine.Substring(args[0].Length + 1);
+                    if (action == "save")
+                    {
+                        SaveFromObjectDB(args.Context);
+                    }
                 }
                 else
                 {
-                    Player.m_localPlayer.GetInventory().RemoveItem(selectedItem, stackPrice.Key);
-                    text = $"{stackPrice.Key}x{selectedItem.m_shared.m_name}";
+                    args.Context.AddString("Syntax: tradersextended [action]");
                 }
-
-                Player.m_localPlayer.GetInventory().AddItem(m_coinPrefab.gameObject.name, stackCoins, m_coinPrefab.m_itemData.m_quality, m_coinPrefab.m_itemData.m_variant, 0L, "");
-                __instance.m_sellEffects.Create((__instance as MonoBehaviour).transform.position, Quaternion.identity);
-                Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, Localization.instance.Localize("$msg_sold", text, stackCoins.ToString()), 0, selectedItem.m_shared.m_icons[0]);
-                __instance.m_trader.OnSold();
-                Gogan.LogEvent("Game", "SoldItem", text, 0L);
-
-                __instance.FillList();
-            }
+            }, isCheat: false, isNetwork: false, onlyServer: false, isSecret: false, allowInDevBuild: false, () => new List<string>() { "save" }, alwaysRefreshTabOptions: true, remoteCommand: false);
         }
 
-        private static void AddItemToSellList(TradeableItem item)
+        public static void SaveFromObjectDB(Terminal context)
         {
-            if (item.price > 0 && item.stack > 0)
+            List<TradeableItem> allItems = new List<TradeableItem>();
+            foreach (GameObject prefab in ObjectDB.instance.m_items)
             {
-                if (string.IsNullOrEmpty(item.requiredGlobalKey) || ZoneSystem.instance.GetGlobalKey(item.requiredGlobalKey))
+                if (!prefab.TryGetComponent<ItemDrop>(out ItemDrop itemDrop))
+                    continue;
+
+                allItems.Add(new TradeableItem()
                 {
-                    GameObject prefab = ObjectDB.instance.GetItemPrefab(item.prefab);
-                    if (prefab != null)
-                    {
-                        string name = prefab.GetComponent<ItemDrop>().m_itemData.m_shared.m_name;
-
-                        // While this data structure supports several price per stack current sell list implementation does not
-                        // Maybe later
-                        if (!m_tempItemsPrice.ContainsKey(name))
-                        {
-                            m_tempItemsPrice.Add(name, new Dictionary<int, int>());
-
-                            if (!m_tempItemsPrice[name].ContainsKey(item.stack))
-                            {
-                                if (item.stack == 1)
-                                {
-                                    Player.m_localPlayer.GetInventory().GetAllItems(name, m_tempItems);
-                                    m_tempItemsPrice[name].Add(item.stack, item.price);
-                                }
-                                else if (Player.m_localPlayer.GetInventory().CountItems(name) >= item.stack)
-                                {
-                                    m_tempItems.Add(Player.m_localPlayer.GetInventory().GetItem(name));
-                                    m_tempItemsPrice[name].Add(item.stack, item.price);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        public static void FillSellableList(StoreGui __instance)
-        {
-            foreach (GameObject item in sellItemList)
-            {
-                UnityEngine.Object.Destroy(item);
-            }
-            sellItemList.Clear();
-
-            Transform items = sellPanel.transform.Find("ItemList").Find("Items");
-
-            RectTransform m_listRoot = items.Find("ListRoot").GetComponent<RectTransform>();
-            GameObject m_listElement = items.Find("ItemElement").gameObject;
-
-            m_tempItems.Clear();
-            m_tempItemsPrice.Clear();
-            
-            if (sellableItems.ContainsKey(TraderListKey(__instance.m_trader.m_name, ItemsListType.Sell)))
-                sellableItems[TraderListKey(__instance.m_trader.m_name, ItemsListType.Sell)].ForEach(item => AddItemToSellList(item));
-
-            if (sellableItems.ContainsKey(CommonListKey(ItemsListType.Sell)))
-                sellableItems[CommonListKey(ItemsListType.Sell)].ForEach(item => AddItemToSellList(item));
-
-            if (__instance.m_coinPrefab != null)
-            {
-                for (int i = m_tempItems.Count - 1; i >= 0; i--)
-                {
-                    ItemDrop.ItemData tradeItem = m_tempItems[i];
-                    if (tradeItem.m_shared.m_name == __instance.m_coinPrefab.m_itemData.m_shared.m_name)
-                        m_tempItems.RemoveAt(i);
-                }
-            }
-
-            float b = (float)m_tempItems.Count * __instance.m_itemSpacing;
-            b = Mathf.Max(__instance.m_itemlistBaseSize, b);
-            m_listRoot.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, b);
-            for (int i = 0; i < m_tempItems.Count; i++)
-            {
-                ItemDrop.ItemData tradeItem = m_tempItems[i];
-
-                GameObject element = Instantiate(m_listElement, m_listRoot);
-                element.SetActive(value: true);
-                (element.transform as RectTransform).anchoredPosition = new Vector2(0f, (float)i * (0f - __instance.m_itemSpacing));
-                Image component = element.transform.Find("icon").GetComponent<Image>();
-                component.sprite = tradeItem.GetIcon();
-                string text = Localization.instance.Localize(tradeItem.m_shared.m_name);
-
-                if (ItemStack(tradeItem) > 1)
-                {
-                    text = text + " x" + ItemStack(tradeItem);
-                }
-
-                TMP_Text component2 = element.transform.Find("name").GetComponent<TMP_Text>();
-                component2.text = text;
-                element.GetComponent<UITooltip>().Set(tradeItem.m_shared.m_name, tradeItem.GetTooltip(), __instance.m_tooltipAnchor);
-                TMP_Text component3 = element.transform.Find("coin_bkg").Find("price").GetComponent<TMP_Text>();
-                component3.text = ItemPrice(tradeItem).ToString();
-
-                element.GetComponent<Button>().onClick.AddListener(delegate
-                {
-                    OnSelectedItem(element);
+                    prefab = prefab.name,
+                    price = Math.Max(itemDrop.m_itemData.m_shared.m_value, 1)
                 });
-
-                sellItemList.Add(element);
             }
 
-            if (selectedItemIndex == -1)
-                selectedItemIndex = GetSelectedItemIndex();
+            string JSON = JsonConvert.SerializeObject(allItems, Formatting.Indented);
 
-            SelectItem(Mathf.Min(m_tempItems.Count - 1, selectedItemIndex), center: false);
+            string filename = Path.Combine(pluginDirectory.FullName, "ObjectDB.list.json");
+
+            File.WriteAllText(filename, JSON);
+
+            context.AddString($"Saved {allItems.Count} items to {filename}");
         }
 
-        public static void UpdateSellButton(StoreGui __instance)
+        public static void FillConfigLists()
         {
-            int coins = 0;
-            for (int i = m_tempItems.Count - 1; i >= 0; i--)
-            {
-                ItemDrop.ItemData tradeItem = m_tempItems[i];
-                if (tradeItem.m_shared.m_name != __instance.m_coinPrefab.m_itemData.m_shared.m_name)
-                    coins += ItemPrice(tradeItem) * Mathf.CeilToInt(Player.m_localPlayer.GetInventory().CountItems(tradeItem.m_shared.m_name) / ItemStack(tradeItem));
-            }
-
-            sellPanel.transform.Find("coins").Find("coins").GetComponent<TMP_Text>().text = coins.ToString();
-
-            sellButton.interactable = selectedItem != null;
+            _ignoreItemDiscovery = new HashSet<string>(checkForDiscoveryIgnoreItems.Value.Split(',').Select(p => p.Trim().ToLower()).Where(p => !string.IsNullOrWhiteSpace(p)).ToList());
+            _tradersToRepairWeapons = new HashSet<string>(tradersToRepairWeapons.Value.Split(',').Select(p => p.Trim().ToLower()).Where(p => !string.IsNullOrWhiteSpace(p)).ToList());
+            _tradersToRepairArmor = new HashSet<string>(tradersToRepairArmor.Value.Split(',').Select(p => p.Trim().ToLower()).Where(p => !string.IsNullOrWhiteSpace(p)).ToList());
         }
 
-        private static int ItemPrice(ItemDrop.ItemData tradeItem)
+        public static bool IgnoreItemDiscovery(string prefabName)
         {
-            try
-            {
-                KeyValuePair<int, int> stackPrice = m_tempItemsPrice[tradeItem.m_shared.m_name].First();
-                return (stackPrice.Key == 1) ? stackPrice.Value * tradeItem.m_stack : stackPrice.Value;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning($"Cannot find item {tradeItem.m_shared.m_name} price: {ex}");
-            }
-
-            return 0;
+            return _ignoreItemDiscovery.Contains(prefabName);
         }
 
-        private static int ItemStack(ItemDrop.ItemData tradeItem)
-        {
-            try
-            {
-                KeyValuePair<int, int> stackPrice = m_tempItemsPrice[tradeItem.m_shared.m_name].First();
-                return (stackPrice.Key == 1) ? tradeItem.m_stack : stackPrice.Key;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning($"Cannot find item {tradeItem.m_shared.m_name} stack: {ex}");
-            }
-
-            return 1;
-        }
-
-        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.SellItem))]
-        public static class StoreGui_SellItem_Patch
-        {
-            static bool Prefix(StoreGui __instance)
-            {
-                if (!modEnabled.Value) return true;
-
-                SellSelectedItem(__instance);
-
-                return false;
-            }
-        }
-
-        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Awake))]
-        public static class StoreGui_Awake_Patch
-        {
-            [HarmonyPriority(Priority.Last)]
-            static void Postfix(StoreGui __instance)
-            {
-                if (!modEnabled.Value) return;
-
-                sellPanel = Instantiate(__instance.m_rootPanel, __instance.m_rootPanel.transform);
-                sellPanel.transform.localPosition = new Vector3(250, 0, 0);
-
-                Destroy(sellPanel.transform.Find("SellPanel").gameObject);
-                Destroy(sellPanel.transform.Find("border (1)").gameObject);
-                Destroy(sellPanel.transform.Find("topic").gameObject);
-                Destroy(sellPanel.transform.Find("bkg").gameObject);
-
-                Transform sellPanelTransform = sellPanel.transform.Find("BuyButton");
-                sellPanelTransform.Find("Text").GetComponent<TMP_Text>().text = Localization.instance.Localize("$store_sell");
-                sellPanelTransform.GetComponent<UIGamePad>().m_zinputKey = "JoyButtonX";
-                
-                sellButton = sellPanelTransform.GetComponent<Button>();
-
-                sellButton.onClick = __instance.m_rootPanel.transform.Find("SellPanel").Find("SellButton").GetComponent<Button>().onClick;
-
-                __instance.m_rootPanel.transform.Find("SellPanel").gameObject.SetActive(false);
-
-                __instance.m_rootPanel.transform.Find("border (1)").GetComponent<RectTransform>().anchorMax = new Vector2(2, 1);
-
-                RectTransform topic = __instance.m_rootPanel.transform.Find("topic").GetComponent<RectTransform>();
-                topic.anchorMin = new Vector2(0.5f, 1);
-                topic.anchorMax = new Vector2(1.5f, 1);
-
-                amountDialog = Instantiate(InventoryGui.instance.m_splitPanel.gameObject, __instance.m_rootPanel.transform.parent);
-
-                Transform win_bkg = amountDialog.transform.Find("win_bkg");
-
-                sliderTitle = win_bkg.Find("Text").GetComponent<TMP_Text>();
-                sliderDialog = win_bkg.Find("Slider").GetComponent<Slider>();
-                sliderAmountText = win_bkg.Find("amount").GetComponent<TMP_Text>();
-                sliderImage = win_bkg.Find("Icon_bkg").Find("Icon").GetComponent<Image>();
-
-                sliderDialog.onValueChanged.AddListener(delegate
-                {
-                    OnSplitSliderChanged();
-                });
-
-                win_bkg.Find("Button_ok").GetComponent<Button>().onClick.AddListener(delegate
-                {
-                    BuySelectedItem(__instance);
-                });
-
-                win_bkg.Find("Button_cancel").GetComponent<Button>().onClick.AddListener(delegate
-                {
-                    CloseAmountDialog();
-                });
-
-                if (epicLootIsAdventureModeEnabled)
-                {
-                    Vector3 storePos = __instance.m_rootPanel.transform.localPosition;
-                    storePos.x -= 100;
-                    __instance.m_rootPanel.transform.localPosition = storePos;
-                }
-
-                logger.LogInfo($"StoreGui panel patched");
-
-                SetupConfigWatcher();
-            }
-        }
-
-        private static void SetupConfigWatcher()
+        public static void SetupConfigWatcher()
         {
             string filter = $"{pluginID}.*.json";
 
-            FileSystemWatcher fileSystemWatcher1 = new FileSystemWatcher(pluginFolder.FullName, filter);
-            fileSystemWatcher1.Changed += new FileSystemEventHandler(ReadConfigs);
-            fileSystemWatcher1.Created += new FileSystemEventHandler(ReadConfigs);
-            fileSystemWatcher1.Renamed += new RenamedEventHandler(ReadConfigs);
-            fileSystemWatcher1.Deleted += new FileSystemEventHandler(ReadConfigs);
-            fileSystemWatcher1.IncludeSubdirectories = true;
-            fileSystemWatcher1.SynchronizingObject = ThreadingHelper.SynchronizingObject;
-            fileSystemWatcher1.EnableRaisingEvents = true;
+            FileSystemWatcher fileSystemWatcherPlugin = new FileSystemWatcher(pluginDirectory.FullName, filter);
+            fileSystemWatcherPlugin.Changed += new FileSystemEventHandler(ReadConfigs);
+            fileSystemWatcherPlugin.Created += new FileSystemEventHandler(ReadConfigs);
+            fileSystemWatcherPlugin.Renamed += new RenamedEventHandler(ReadConfigs);
+            fileSystemWatcherPlugin.Deleted += new FileSystemEventHandler(ReadConfigs);
+            fileSystemWatcherPlugin.IncludeSubdirectories = true;
+            fileSystemWatcherPlugin.SynchronizingObject = ThreadingHelper.SynchronizingObject;
+            fileSystemWatcherPlugin.EnableRaisingEvents = true;
+
+            FileSystemWatcher fileSystemWatcherConfig = new FileSystemWatcher(configDirectory.FullName, filter);
+            fileSystemWatcherConfig.Changed += new FileSystemEventHandler(ReadConfigs);
+            fileSystemWatcherConfig.Created += new FileSystemEventHandler(ReadConfigs);
+            fileSystemWatcherConfig.Renamed += new RenamedEventHandler(ReadConfigs);
+            fileSystemWatcherConfig.Deleted += new FileSystemEventHandler(ReadConfigs);
+            fileSystemWatcherConfig.IncludeSubdirectories = true;
+            fileSystemWatcherConfig.SynchronizingObject = ThreadingHelper.SynchronizingObject;
+            fileSystemWatcherConfig.EnableRaisingEvents = true;
 
             ReadConfigs(null, null);
         }
@@ -544,7 +232,7 @@ namespace TradersExtended
         {
             Dictionary<string, string> localConfig = new Dictionary<string, string>();
 
-            foreach (FileInfo file in pluginFolder.GetFiles("*.json", SearchOption.AllDirectories))
+            foreach (FileInfo file in pluginDirectory.GetFiles("*.json", SearchOption.AllDirectories))
             {
                 string[] filename = file.Name.Split('.');
 
@@ -557,9 +245,42 @@ namespace TradersExtended
                 if (!Enum.TryParse(filename[3], true, out ItemsListType list))
                     continue;
 
-                logger.LogInfo($"Found {file.FullName}");
+                LogInfo($"Found {file.FullName}");
 
-                string listKey = TraderListKey(filename[2].ToLower(), list);
+                string listKey = TraderListKey(filename[2].ToLower(), list) + ".plugin";
+
+                try
+                {
+                    using (FileStream fs = new FileStream(file.FullName, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    using (StreamReader reader = new StreamReader(fs))
+                    {
+                        localConfig.Add(listKey, reader.ReadToEnd());
+                        reader.Close();
+                        fs.Dispose();
+                    }
+                }
+                catch (Exception e)
+                {
+                    logger.LogWarning($"Error reading file ({file.FullName})! Error: {e.Message}");
+                }
+            }
+
+            foreach (FileInfo file in pluginDirectory.GetFiles("*.json", SearchOption.AllDirectories))
+            {
+                string[] filename = file.Name.Split('.');
+
+                if (filename.Length != 5)
+                    continue;
+
+                if (!file.Name.ToLower().StartsWith(pluginID.ToLower()))
+                    continue;
+
+                if (!Enum.TryParse(filename[3], true, out ItemsListType list))
+                    continue;
+
+                LogInfo($"Found {file.FullName}");
+
+                string listKey = TraderListKey(filename[2].ToLower(), list) + ".config";
 
                 try
                 {
@@ -592,7 +313,7 @@ namespace TradersExtended
 
                 string list = TraderListKey(resName[0].ToLower(), listType) + ".internal";
 
-                logger.LogInfo($"Found resource {list}");
+                LogInfo($"Found resource {list}");
 
                 try
                 {
@@ -638,7 +359,7 @@ namespace TradersExtended
 
             List<TradeableItem> items = valuableItems.Concat(sellableItems[listKey]).GroupBy(item => item.prefab).Select(g => g.Last()).ToList();
 
-            logger.LogInfo($"Loaded {items.Count - itemsCount} common valuable items from ObjectDB");
+            LogInfo($"Loaded {items.Count - itemsCount} common valuable items from ObjectDB");
 
             sellableItems[listKey] = items;
         }
@@ -684,7 +405,7 @@ namespace TradersExtended
 
             List<TradeableItem> items = tradeableItems[listKey].Concat(itemsFromFile).GroupBy(item => item.prefab).Select(g => g.First()).ToList();
 
-            logger.LogInfo($"Loaded {itemsFromFile.Count} tradeable item from {listKey}");
+            LogInfo($"Loaded {itemsFromFile.Count} tradeable item from {listKey}");
 
             tradeableItems[listKey] = items;
         }
@@ -710,265 +431,24 @@ namespace TradersExtended
 
             List<TradeableItem> items = sellableItems[listKey].Concat(itemsFromFile).GroupBy(item => item.prefab).Select(g => g.First()).ToList();
 
-            logger.LogInfo($"Loaded {itemsFromFile.Count} sellable item from {listKey}");
+            LogInfo($"Loaded {itemsFromFile.Count} sellable item from {listKey}");
 
             sellableItems[listKey] = items;
         }
 
-        private static string TraderListKey(string name, ItemsListType type)
+        private static string TraderName(string name)
         {
-            return $"{name.ToLower().Replace("$npc_", "")}.{type}";
+            return name.ToLower().Replace("$npc_", "");
         }
 
-        private static string CommonListKey(ItemsListType type)
+        public static string TraderListKey(string name, ItemsListType type)
+        {
+            return $"{TraderName(name)}.{type}";
+        }
+        
+        public static string CommonListKey(ItemsListType type)
         {
             return TraderListKey("common", type);
         }
-
-        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.FillList))]
-        public static class StoreGui_FillList_Patch
-        {
-            static void Postfix(StoreGui __instance, Trader ___m_trader,  List<GameObject> ___m_itemList)
-            {
-                if (!modEnabled.Value) return;
-
-                if (epicLootEnabled)
-                {
-                    List<Trader.TradeItem> itemList = ___m_trader.GetAvailableItems();
-                    if (itemList.Count == ___m_itemList.Count)
-                        for (int i = 0; i < itemList.Count; i++)
-                        {
-                            Image component = ___m_itemList[i].transform.Find("icon").GetComponent<Image>();
-                            component.sprite = itemList[i].m_prefab.m_itemData.GetIcon();
-                        }
-                }
-
-                FillSellableList(__instance);
-            }
-        }
-
-        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.OnSelectedItem))]
-        public static class StoreGui_SelectItem_Patch
-        {
-            static void Postfix(StoreGui __instance)
-            {
-                if (!modEnabled.Value) return;
-
-                if (Time.time - m_leftClickTime < 0.3f)
-                {
-                    OnSelectedTradeableItemDblClick(__instance);
-                    m_leftClickTime = 0f;
-                }
-                else
-                {
-                    m_leftClickTime = Time.time;
-                }
-            }
-        }
-
-        private static void OnSelectedTradeableItemDblClick(StoreGui __instance)
-        {
-            Trader.TradeItem selectedItem = __instance.m_selectedItem;
-
-            int playerCoins = __instance.GetPlayerCoins();
-
-            if (selectedItem == null) return;
-
-            if (selectedItem.m_stack != 1) return;
-
-            if (selectedItem.m_prefab.m_itemData.m_shared.m_maxStackSize == 1) return;
-
-            if (playerCoins < selectedItem.m_price) return;
-
-            sliderDialog.minValue = 1f;
-            sliderDialog.maxValue = Math.Min(selectedItem.m_prefab.m_itemData.m_shared.m_maxStackSize, Mathf.CeilToInt(playerCoins / selectedItem.m_price));
-            sliderDialog.value = 1;
-
-            sliderTitle.text = $"{Localization.instance.Localize("$store_buy")} {Localization.instance.Localize(selectedItem.m_prefab.m_itemData.m_shared.m_name)}";
-            sliderImage.sprite = selectedItem.m_prefab.m_itemData.GetIcon();
-
-            OnSplitSliderChanged();
-
-            amountDialog.SetActive(value: true);
-        }
-
-        public static void OnSplitSliderChanged()
-        {
-            sliderAmountText.text = ((int)sliderDialog.value).ToString();
-        }
-
-        private static void BuySelectedItem(StoreGui __instance)
-        {
-            if (__instance.m_selectedItem != null && CanAffordSelectedItem(__instance))
-            {
-                int stack = Mathf.Min(Mathf.CeilToInt(sliderDialog.value), __instance.m_selectedItem.m_prefab.m_itemData.m_shared.m_maxStackSize);
-                int quality = __instance.m_selectedItem.m_prefab.m_itemData.m_quality;
-                int variant = __instance.m_selectedItem.m_prefab.m_itemData.m_variant;
-                if (Player.m_localPlayer.GetInventory().AddItem(__instance.m_selectedItem.m_prefab.name, stack, quality, variant, 0L, "") != null)
-                {
-                    Player.m_localPlayer.GetInventory().RemoveItem(__instance.m_coinPrefab.m_itemData.m_shared.m_name, __instance.m_selectedItem.m_price * stack);
-                    __instance.m_trader.OnBought(__instance.m_selectedItem);
-                    __instance.m_buyEffects.Create((__instance as MonoBehaviour).transform.position, Quaternion.identity);
-                    Player.m_localPlayer.ShowPickupMessage(__instance.m_selectedItem.m_prefab.m_itemData, stack);
-                    __instance.FillList();
-                    Gogan.LogEvent("Game", "BoughtItem", __instance.m_selectedItem.m_prefab.name, 0L);
-                }
-            }
-            CloseAmountDialog();
-        }
-
-        private static bool CanAffordSelectedItem(StoreGui __instance)
-        {
-            int playerCoins = __instance.GetPlayerCoins();
-            return __instance.m_selectedItem.m_price * sliderDialog.value <= playerCoins;
-        }
-
-        private static void CloseAmountDialog()
-        {
-            if (amountDialog != null)
-                amountDialog.SetActive(value: false);
-        }
-
-        [HarmonyPatch(typeof(Trader), nameof(Trader.GetAvailableItems))]
-        public static class Trader_GetAvailableItems_Patch
-        {
-            static void Postfix(Trader __instance, ref List<Trader.TradeItem> __result)
-            {
-                if (!modEnabled.Value) return;
-
-                AddAvailableItems(CommonListKey(ItemsListType.Buy), ref __result);
-
-                AddAvailableItems(TraderListKey(__instance.m_name, ItemsListType.Buy), ref __result);
-
-            }
-        }
-
-        private static void AddAvailableItems(string listKey, ref List<Trader.TradeItem> __result)
-        {
-            if (tradeableItems.ContainsKey(listKey))
-                foreach (TradeableItem item in tradeableItems[listKey])
-            {
-                if (string.IsNullOrEmpty(item.requiredGlobalKey) || ZoneSystem.instance.GetGlobalKey(item.requiredGlobalKey))
-                {
-                    GameObject itemPrefab = ObjectDB.instance.GetItemPrefab(item.prefab);
-
-                    if (itemPrefab == null)
-                        continue;
-
-                    ItemDrop prefab = itemPrefab.GetComponent<ItemDrop>();
-
-                    if (__result.Exists(x => x.m_prefab == prefab))
-                    {
-                        Trader.TradeItem itemTrader = __result.First(x => x.m_prefab == prefab);
-                        itemTrader.m_price = item.price;
-                        itemTrader.m_stack = item.stack;
-                        itemTrader.m_requiredGlobalKey = item.requiredGlobalKey;
-                    }
-                    else
-                    {
-                        __result.Add(new Trader.TradeItem
-                        {
-                            m_prefab = prefab,
-                            m_price = item.price,
-                            m_stack = item.stack,
-                            m_requiredGlobalKey = item.requiredGlobalKey
-                        });
-                    }
-                }
-            }
-        }
-
-        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.UpdateSellButton))]
-        public static class StoreGui_UpdateSellButton_Patch
-        {
-            static void Postfix(StoreGui __instance)
-            {
-                if (!modEnabled.Value) return;
-
-                UpdateSellButton(__instance);
-            }
-        }
-
-        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Show))]
-        public static class StoreGui_Show_Patch
-        {
-            static void Postfix(StoreGui __instance)
-            {
-                if (!modEnabled.Value) return;
-
-                sellPanel.SetActive(value: true);
-            }
-        }
-
-        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Hide))]
-        public static class StoreGui_Hide_Patch
-        {
-            static void Postfix(StoreGui __instance)
-            {
-                if (!modEnabled.Value) return;
-
-                sellPanel.SetActive(value: false);
-                CloseAmountDialog();
-            }
-        }
-
-        [HarmonyPatch(typeof(Terminal), nameof(Terminal.InitTerminal))]
-        public static class Terminal_Patch
-        {
-            public static void Postfix()
-            {
-                new Terminal.ConsoleCommand("tradersextendedsave", "Save every item from ObjectDB into file ObjectDB.list.json next to dll", args =>
-                {
-                    SaveFromObjectDB(args.Context);
-                });
-            }
-
-            public static void SaveFromObjectDB(Terminal context)
-            {
-                List<TradeableItem> allItems = new List<TradeableItem>();
-                foreach (GameObject prefab in ObjectDB.instance.m_items)
-                {
-                    if (!prefab.TryGetComponent<ItemDrop>(out ItemDrop itemDrop))
-                        continue;
-
-                    allItems.Add(new TradeableItem()
-                    {
-                        prefab = prefab.name,
-                        price = Math.Max(itemDrop.m_itemData.m_shared.m_value, 1)
-                    });
-                }
-
-                string JSON = JsonConvert.SerializeObject(allItems, Formatting.Indented);
-
-                string filename = Path.Combine(pluginFolder.FullName, "ObjectDB.list.json");
-
-                File.WriteAllText(filename, JSON);
-
-                context.AddString($"Saved {allItems.Count} items to {filename}");
-            }
-        }
-
-        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.UpdateRecipeGamepadInput))]
-        public static class StoreGui_UpdateRecipeGamepadInput_Patch
-        {
-            static void Postfix()
-            {
-                if (!modEnabled.Value) return;
-
-                if (sellItemList.Count > 0)
-                {
-                    if (ZInput.GetButtonDown("JoyRStickDown") || ZInput.GetButtonDown("JoyDPadDown") && ZInput.GetButtonDown("JoyAltPlace"))
-                    {
-                        SelectItem(Mathf.Min(sellItemList.Count - 1, GetSelectedItemIndex() + 1), center: true);
-                    }
-
-                    if (ZInput.GetButtonDown("JoyRStickUp") || ZInput.GetButtonDown("JoyDPadUp") && ZInput.GetButtonDown("JoyAltPlace"))
-                    {
-                        SelectItem(Mathf.Max(0, GetSelectedItemIndex() - 1), center: true);
-                    }
-                }
-            }
-        }
-
     }
 }

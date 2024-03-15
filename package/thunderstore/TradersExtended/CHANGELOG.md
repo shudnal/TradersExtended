@@ -1,3 +1,8 @@
+# 1.0.22
+* trader will wait for items discovery
+* trader will repair your stuff for coins
+* JSON configs could be stored both next to dll and in config folder
+
 # 1.0.21
 * refinements for shared config files reading
 
