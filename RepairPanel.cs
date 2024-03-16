@@ -42,6 +42,11 @@ namespace TradersExtended
             Update(storeGui);
         }
 
+        public static void AddButtonBlocker(GameObject blocker)
+        {
+            repairButton.GetComponent<UIGamePad>().m_blockingElements.Add(blocker);
+        }
+
         public static void Update(StoreGui storeGui)
         {
             if (!StoreGui.IsVisible())

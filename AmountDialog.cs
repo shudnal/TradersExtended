@@ -10,7 +10,6 @@ namespace TradersExtended
     internal static class AmountDialog
     {
         private static float leftClickTime;
-        private static Trader.TradeItem selectedItem;
 
         private static GameObject amountDialog;
         private static Slider sliderDialog;
@@ -22,7 +21,7 @@ namespace TradersExtended
         private static string m_splitInput = "";
         private static DateTime m_lastSplitInput;
 
-        public static void Init(StoreGui storeGui)
+        public static GameObject Init(StoreGui storeGui)
         {
             amountDialog = UnityEngine.Object.Instantiate(InventoryGui.instance.m_splitPanel.gameObject, storeGui.m_rootPanel.transform.parent);
 
@@ -47,19 +46,19 @@ namespace TradersExtended
             {
                 Close();
             });
+
+            return amountDialog;
         }
 
         public static void OnSelectedTradeableItemClick(StoreGui storeGui)
         {
             if (Time.time - leftClickTime < 0.3f)
             {
-                OnSelectedTradeableItemDblClick(storeGui);
+                Open(storeGui);
                 leftClickTime = 0f;
-                //selectedItem = null;
             }
             else
             {
-                //selectedItem = storeGui.m_selectedItem;
                 leftClickTime = Time.time;
             }
         }
@@ -121,10 +120,9 @@ namespace TradersExtended
             amountDialog?.SetActive(value: false);
         }
 
-        private static void OnSelectedTradeableItemDblClick(StoreGui __instance)
+        public static void Open(StoreGui __instance)
         {
-            selectedItem = __instance.m_selectedItem;
-                //return; */
+            Trader.TradeItem selectedItem = __instance.m_selectedItem;
 
             int playerCoins = __instance.GetPlayerCoins();
 
@@ -144,7 +142,7 @@ namespace TradersExtended
             sliderDialog.maxValue = Math.Min(selectedItem.m_prefab.m_itemData.m_shared.m_maxStackSize, Mathf.CeilToInt(playerCoins / selectedItem.m_price));
             sliderDialog.value = 1;
 
-            sliderTitle.text = $"{Localization.instance.Localize("$store_buy")} {Localization.instance.Localize(selectedItem.m_prefab.m_itemData.m_shared.m_name)}";
+            sliderTitle.SetText($"{Localization.instance.Localize("$store_buy")} {Localization.instance.Localize(selectedItem.m_prefab.m_itemData.m_shared.m_name)}");
             sliderImage.sprite = selectedItem.m_prefab.m_itemData.GetIcon();
 
             OnSplitSliderChanged();
@@ -154,7 +152,7 @@ namespace TradersExtended
 
         public static void OnSplitSliderChanged()
         {
-            sliderAmountText.text = ((int)sliderDialog.value).ToString();
+            sliderAmountText.SetText(((int)sliderDialog.value).ToString());
         }
 
         private static void BuySelectedItem(StoreGui __instance)

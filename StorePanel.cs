@@ -6,6 +6,7 @@ using TMPro;
 using UnityEngine.UI;
 using UnityEngine;
 using static TradersExtended.TradersExtended;
+using System.Reflection;
 
 namespace TradersExtended
 {
@@ -217,19 +218,15 @@ namespace TradersExtended
                 string text = Localization.instance.Localize(tradeItem.m_shared.m_name);
 
                 if (itemStack > 1)
-                {
                     text = text + " x" + ItemStack(tradeItem);
-                }
 
                 TMP_Text component2 = element.transform.Find("name").GetComponent<TMP_Text>();
-                component2.text = text;
+                component2.SetText(text);
                 element.GetComponent<UITooltip>().Set(tradeItem.m_shared.m_name, tradeItem.GetTooltip(), __instance.m_tooltipAnchor);
                 TMP_Text component3 = element.transform.Find("coin_bkg").Find("price").GetComponent<TMP_Text>();
-                component3.text = itemPrice.ToString();
+                component3.SetText(itemPrice.ToString());
                 if (!canSell)
-                {
                     component3.color = Color.grey;
-                }
 
                 element.GetComponent<Button>().onClick.AddListener(delegate
                 {
@@ -299,9 +296,12 @@ namespace TradersExtended
                 UnityEngine.Object.Destroy(sellPanel.transform.Find("border (1)").gameObject);
                 UnityEngine.Object.Destroy(sellPanel.transform.Find("bkg").gameObject);
 
-                // Set trader and player names
-                storeName = __instance.m_rootPanel.transform.Find("topic").GetComponent<RectTransform>().GetComponent<TMP_Text>();
+                // Link trader and player names and coins labels
+                storeName = __instance.m_rootPanel.transform.Find("topic").GetComponent<TMP_Text>();
                 playerName = sellPanel.transform.Find("topic").GetComponent<TMP_Text>();
+                playerCoins = sellPanel.transform.Find("coins/coins").GetComponent<TMP_Text>();
+                traderCoins = __instance.m_coinText;
+                traderCoinsPanel = __instance.m_rootPanel.transform.Find("coins").gameObject;
 
                 // Prepare new sell button
                 Transform sellPanelTransform = sellPanel.transform.Find("BuyButton");
@@ -318,16 +318,27 @@ namespace TradersExtended
                 {
                     __instance.OnSellItem();
                 });
+                
+                // Copy gamepad hint from Craft button and replace original hint
+                UIGamePad component = sellButton.GetComponent<UIGamePad>();
+                Vector3 position = component.m_hint.transform.localPosition;
+                UnityEngine.Object.Destroy(component.m_hint);
 
-                playerCoins = sellPanel.transform.Find("coins/coins").GetComponent<TMP_Text>();
-                traderCoins = __instance.m_coinText;
-                traderCoinsPanel = __instance.m_rootPanel.transform.Find("coins").gameObject;
+                GameObject hint = UnityEngine.Object.Instantiate(InventoryGui.instance.m_craftButton.GetComponent<UIGamePad>().m_hint, sellButton.transform);
+                hint.transform.localPosition = position;
 
                 // Extend the borders
                 __instance.m_rootPanel.transform.Find("border (1)").GetComponent<RectTransform>().anchorMax = new Vector2(2, 1);
 
-                AmountDialog.Init(__instance);
+                // Init amount dialog
+                GameObject amountDialog = AmountDialog.Init(__instance);
 
+                // Add amount dialog to block gamepad input of buttons
+                __instance.m_rootPanel.transform.Find("BuyButton").GetComponent<UIGamePad>().m_blockingElements.Add(amountDialog);
+                sellButton.GetComponent<UIGamePad>().m_blockingElements.Add(amountDialog);
+                RepairPanel.AddButtonBlocker(amountDialog);
+
+                // Move store to the left to create space between
                 epicLootEnabled = epicLootPlugin != null;
                 if (epicLootEnabled)
                 {
@@ -562,7 +573,7 @@ namespace TradersExtended
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.UpdateRecipeGamepadInput))]
         public static class StoreGui_UpdateRecipeGamepadInput_SellListGamepadNavigation
         {
-            static void Postfix()
+            static void Postfix(StoreGui __instance)
             {
                 if (!modEnabled.Value)
                     return;
@@ -575,6 +586,12 @@ namespace TradersExtended
 
                 if (ZInput.GetButtonDown("JoyRStickUp") || ZInput.GetButtonDown("JoyDPadUp") && ZInput.GetButtonDown("JoyAltPlace"))
                     SelectItem(Mathf.Max(0, GetSelectedItemIndex() - 1), center: true);
+
+                if (ZInput.GetButtonDown("JoyButtonA") && ZInput.GetButtonDown("JoyAltPlace"))
+                {
+                    AmountDialog.Open(__instance);
+                    ZInput.ResetButtonStatus("JoyButtonA");
+                }
             }
         }
 
@@ -593,6 +610,8 @@ namespace TradersExtended
 
                 if (traderUseCoins.Value && traderNetView != null && traderNetView.IsValid())
                     traderCoins.SetText(GetTraderCoins().ToString());
+
+                UpdateNames();
             }
         }
 
@@ -695,5 +714,25 @@ namespace TradersExtended
             }
         }
 
+        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.GetSelectedItemIndex))]
+        public static class StoreGui_GetSelectedItemIndex_GamePadScrollFix
+        {
+            public static bool Prefix(ref int __result, List<GameObject> ___m_itemList)
+            {
+                if (!modEnabled.Value)
+                    return true;
+
+                __result = 0;
+                for (int i = 0; i < ___m_itemList.Count; i++)
+                    if (___m_itemList[i].transform.Find("selected").gameObject.activeSelf)
+                    {
+                        __result = i;
+                        break;
+                    }
+
+                return false;
+            }
+
+        }
     }
 }

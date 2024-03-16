@@ -4,6 +4,8 @@
 * trader could have limited replenished amount of coins
 * trader could give discounts and set markups
 * JSON configs could be stored both next to dll and in config folder
+* fixed limited scrolling of buy list using gamepad
+* Better gamepad support
 
 # 1.0.21
 * refinements for shared config files reading
