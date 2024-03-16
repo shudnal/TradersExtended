@@ -1,6 +1,8 @@
-# 1.0.22
+# 1.1.0
 * trader will wait for items discovery
 * trader will repair your stuff for coins
+* trader could have limited replenished amount of coins
+* trader could give discounts and set markups
 * JSON configs could be stored both next to dll and in config folder
 
 # 1.0.21

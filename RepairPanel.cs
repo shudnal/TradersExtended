@@ -22,7 +22,7 @@ namespace TradersExtended
             repairPanel.transform.localPosition = new Vector3(592, -603, 0);
 
             repairButton = repairPanel.transform.Find("SellButton").GetComponent<Button>();
-            repairButton.onClick.RemoveAllListeners();
+            repairButton.onClick.SetPersistentListenerState(0, UnityEngine.Events.UnityEventCallState.Off);
             repairButton.onClick.AddListener(delegate
             {
                 OnRepairPressed(storeGui);
@@ -44,7 +44,7 @@ namespace TradersExtended
 
         public static void Update(StoreGui storeGui)
         {
-            if (!storeGui.m_rootPanel.activeSelf)
+            if (!StoreGui.IsVisible())
                 return;
 
             repairPanel.SetActive(traderRepair.Value);
@@ -75,6 +75,9 @@ namespace TradersExtended
                     Player.m_localPlayer.GetInventory().RemoveItem(storeGui.m_coinPrefab.m_itemData.m_shared.m_name, Math.Abs(traderRepairCost.Value));
 
                 repairItemDoneEffects?.Create(Player.m_localPlayer.transform.position, Quaternion.identity);
+
+                StorePanel.UpdateTraderCoins(Math.Abs(traderRepairCost.Value));
+
                 storeGui.m_sellEffects.Create(storeGui.transform.position, Quaternion.identity);
                 
                 Player.m_localPlayer.Message(MessageHud.MessageType.Center, Localization.instance.Localize("$msg_repaired", item.m_shared.m_name));

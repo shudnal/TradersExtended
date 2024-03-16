@@ -16,10 +16,14 @@ A bit more functional than another "simple" trader mods.
 * trader specific or common configurable lists of additional items to buy/sell
 * live update on config changes
 * server synced config
-* configs saved as JSON files next to dll or in subdirectories
+* configs saved as JSON files 
+* config could be stored next to dll, in config folder in any subdirectory or even embedded into dll
 * configurable items are added to current lists (not replacing current vanilla items)
-* double click on stackable item you want to buy (i.g. Iron pit ) to enter needed items amount
-* use right gamepad stick to scroll sell list. Use (X) to sell selected item (ignore button hint)
+* double click on stackable item you want to buy to enter needed items amount
+* use right gamepad stick to scroll sell list. Use (X) to sell selected item (ignore button hint for now)
+* trader could repair your armor or weapons for coins (by default Haldor repair weapons and Hildir armor)
+* trader could have limited replenished amount of coins
+* trader could give a discount or set a markup depending on current amount of coins
 
 ## Config file names
 * are case insensitive for Windows
@@ -86,77 +90,15 @@ I want to be able to sell a stack of Wood for 25 coins after Elder was killed
 ```
 
 ## Installation (manual)
-Extract TradersExtended.dll file to your BepInEx\Plugins\TradersExtended\ folder
+Copy TradersExtended folder to your BepInEx\Plugins\ folder
 
-Create new config file next to dll to add items.
+Create new config file next to dll or in BepInEx\Config\ folder to add items.
 
 ## Compatibility
 * The mod should be compatible with any mods changing item prices to make it sellable and extending tradeable item lists
-* Incompatible with any mod hiding vanilla store UI
-* Mod should be compatible with mods adding more traders with unique names (until they use vanilla store UI)
+* Incompatible with any mod hiding vanilla store UI (straight incompatible with AUGA)
+* The mod should be compatible with mods adding more traders with unique names (until they use vanilla store UI)
+* The mod should be compatible with mods adding more items to store (until its patches are noninvasive)
 
 ## Mirrors
 [Nexus](https://www.nexusmods.com/valheim/mods/2509)
-
-## Changelog
-
-v 1.0.20
-* thunderstore package restructuring
-
-v 1.0.19
-* colored icons from epic loot
-
-v 1.0.18
-* patch 0.217.38
-
-v 1.0.17
-* partial gamepad support
-
-v 1.0.16
-* reduced logging messages
-
-v 1.0.15
-* proper fix for new patch
-
-v 1.0.14
-* fix for new patch
-
-v 1.0.13
-* proper fix for new bepinex
-
-v 1.0.12
-* fix for new bepinex
-
-v 1.0.11
-* another fix for lists priority
-
-v 1.0.9
-* fixed not setting sellable item values on vanilla items
-
-v 1.0.8
-* fixed not setting trade item values on vanilla items
-
-v 1.0.7
-* patch 0.217.22, text field fix
-
-v 1.0.6
-* patch 0.217.22, server sync fix
-
-v 1.0.5
-* patch 0.217.22
-
-v 1.0.4
-* tradersextendedsave command to save all items from ObjectDB
-
-v 1.0.3
-* better positioning for EpicLoot Adventure mode
-
-v 1.0.2
-* double click on stackable item to input needed amount
-* item config unified
-
-v 1.0.1
-* option to load config stored internally
-
-v 1.0.0
-* Initial release

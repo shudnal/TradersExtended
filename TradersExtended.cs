@@ -20,7 +20,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.0.22";
+        private const string pluginVersion = "1.1.0";
 
         private Harmony harmony;
 
@@ -41,6 +41,17 @@ namespace TradersExtended
         public static ConfigEntry<int> traderRepairCost;
         private static ConfigEntry<string> tradersToRepairWeapons;
         private static ConfigEntry<string> tradersToRepairArmor;
+
+        public static ConfigEntry<bool> traderUseCoins;
+        public static ConfigEntry<bool> traderUseFlexiblePricing;
+        public static ConfigEntry<int> traderCoinsMinimumAmount;
+        public static ConfigEntry<int> traderCoinsIncreaseAmount;
+        public static ConfigEntry<int> traderCoinsMaximumAmount;
+        public static ConfigEntry<float> traderDiscount;
+        public static ConfigEntry<float> traderMarkup;
+        public static ConfigEntry<int> traderCoinsReplenishmentRate;
+
+        public static ConfigEntry<string> tradersCustomPrefabs;
 
         public static readonly Dictionary<string, List<TradeableItem>> tradeableItems = new Dictionary<string, List<TradeableItem>>();
         public static readonly Dictionary<string, List<TradeableItem>> sellableItems = new Dictionary<string, List<TradeableItem>>();
@@ -80,7 +91,7 @@ namespace TradersExtended
             logger = Logger;
 
             pluginDirectory = new DirectoryInfo(Assembly.GetExecutingAssembly().Location).Parent;
-            configDirectory = new DirectoryInfo(Paths.ConfigPath).Parent;
+            configDirectory = new DirectoryInfo(Paths.ConfigPath);
 
             ConfigInit();
             _ = configSync.AddLockingConfigEntry(configLocked);
@@ -120,6 +131,18 @@ namespace TradersExtended
 
             tradersToRepairWeapons.SettingChanged += (sender, args) => FillConfigLists();
             tradersToRepairArmor.SettingChanged += (sender, args) => FillConfigLists();
+
+            traderUseCoins = config("Trader coins", "Traders use coins", defaultValue: true, "Traders will have an limited daily refilled amount of coins");
+            traderUseFlexiblePricing = config("Trader coins", "Traders use flexible pricing", defaultValue: true, "Traders will give a discount when their amount of coins is more than minimum or will set a markup when their amount of coins is less than minimum. Amount changes gradually.");
+
+            traderCoinsMinimumAmount = config("Trader coins pricing", "Amount of coins after replenishment minimum", defaultValue: 2000, "Minimum amount of coins trader will have after replenishment.");
+            traderCoinsIncreaseAmount = config("Trader coins pricing", "Amount of coins replenished daily", defaultValue: 1000, "Amount of coins added to current amount until maximum is reached");
+            traderCoinsMaximumAmount = config("Trader coins pricing", "Amount of coins after replenishment maximum", defaultValue: 6000, "Maximum amount of coins for replenishments to stop.");
+            traderDiscount = config("Trader coins pricing", "Trader discount", defaultValue: 0.7f, "Discount for items to buy from trader when current amount of coins is more than maximum replenishment amount.");
+            traderMarkup = config("Trader coins pricing", "Trader markup", defaultValue: 1.5f, "Markup for items to buy from trader when current amount of coins is less than minimum replenishment amount.");
+            traderCoinsReplenishmentRate = config("Trader coins pricing", "Trader coins replenishment rate in days", defaultValue: 1, "Amount of coins is updated at morning");
+
+            tradersCustomPrefabs = config("Traders custom prefab names", "List", defaultValue: "", "List of custom prefab names of Trader added by mods to control coins. Prefab name, case sensitive, comma separated");
 
             InitCommands();
         }
@@ -265,7 +288,7 @@ namespace TradersExtended
                 }
             }
 
-            foreach (FileInfo file in pluginDirectory.GetFiles("*.json", SearchOption.AllDirectories))
+            foreach (FileInfo file in configDirectory.GetFiles("*.json", SearchOption.AllDirectories))
             {
                 string[] filename = file.Name.Split('.');
 
@@ -339,7 +362,7 @@ namespace TradersExtended
             List<TradeableItem> valuableItems = new List<TradeableItem>();
             foreach (GameObject prefab in ObjectDB.instance.m_items)
             {
-                if (!prefab.TryGetComponent<ItemDrop>(out ItemDrop itemDrop))
+                if (!prefab.TryGetComponent(out ItemDrop itemDrop))
                     continue;
 
                 if (itemDrop.m_itemData.m_shared.m_value > 0)

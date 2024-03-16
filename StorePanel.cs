@@ -16,6 +16,10 @@ namespace TradersExtended
         private static TMP_Text storeName;
         private static TMP_Text playerName;
 
+        private static TMP_Text playerCoins;
+        private static TMP_Text traderCoins;
+        private static GameObject traderCoinsPanel;
+
         private static bool epicLootEnabled;
 
         private static readonly List<GameObject> sellItemList = new List<GameObject>();
@@ -24,6 +28,11 @@ namespace TradersExtended
 
         private static ItemDrop.ItemData selectedItem;
         private static int selectedItemIndex = -1;
+
+        private static ZNetView traderNetView;
+        
+        public static readonly int s_traderCoins = "traderCoins".GetStableHashCode();
+        public static readonly int s_traderCoinsReplenished = "traderCoinsReplenished".GetStableHashCode();
 
         public static void OnSelectedItem(GameObject button)
         {
@@ -93,7 +102,7 @@ namespace TradersExtended
                 {
                     stackCoins *= selectedItem.m_stack;
                     Player.m_localPlayer.GetInventory().RemoveItem(selectedItem);
-                    text = ((selectedItem.m_stack <= 1) ? selectedItem.m_shared.m_name : (selectedItem.m_stack + "x" + selectedItem.m_shared.m_name));
+                    text = (selectedItem.m_stack <= 1) ? selectedItem.m_shared.m_name : (selectedItem.m_stack + "x" + selectedItem.m_shared.m_name);
                 }
                 else
                 {
@@ -101,7 +110,12 @@ namespace TradersExtended
                     text = $"{stackPrice.Key}x{selectedItem.m_shared.m_name}";
                 }
 
+                stackCoins = (int)(stackCoins * GetTraderSellPriceFactor(GetTraderCoins()));
+
                 Player.m_localPlayer.GetInventory().AddItem(m_coinPrefab.gameObject.name, stackCoins, m_coinPrefab.m_itemData.m_quality, m_coinPrefab.m_itemData.m_variant, 0L, "");
+
+                UpdateTraderCoins(-stackCoins);
+
                 __instance.m_sellEffects.Create(__instance.transform.position, Quaternion.identity);
                 Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, Localization.instance.Localize("$msg_sold", text, stackCoins.ToString()), 0, selectedItem.m_shared.m_icons[0]);
                 __instance.m_trader.OnSold();
@@ -152,6 +166,8 @@ namespace TradersExtended
             foreach (GameObject item in sellItemList)
                 UnityEngine.Object.Destroy(item);
 
+            int traderCurrentCoins = GetTraderCoins();
+
             sellItemList.Clear();
 
             Transform items = sellPanel.transform.Find("ItemList").Find("Items");
@@ -188,11 +204,19 @@ namespace TradersExtended
                 GameObject element = UnityEngine.Object.Instantiate(m_listElement, m_listRoot);
                 element.SetActive(value: true);
                 (element.transform as RectTransform).anchoredPosition = new Vector2(0f, (float)i * (0f - __instance.m_itemSpacing));
+
+                int itemPrice = Math.Max((int)(ItemPrice(tradeItem) * GetTraderSellPriceFactor(traderCurrentCoins)), 1);
+                int itemStack = ItemStack(tradeItem);
+                
+                bool canSell = itemPrice <= traderCurrentCoins;
+
                 Image component = element.transform.Find("icon").GetComponent<Image>();
                 component.sprite = tradeItem.GetIcon();
+                component.color = (canSell ? Color.white : new Color(1f, 0f, 1f, 0f));
+
                 string text = Localization.instance.Localize(tradeItem.m_shared.m_name);
 
-                if (ItemStack(tradeItem) > 1)
+                if (itemStack > 1)
                 {
                     text = text + " x" + ItemStack(tradeItem);
                 }
@@ -201,7 +225,11 @@ namespace TradersExtended
                 component2.text = text;
                 element.GetComponent<UITooltip>().Set(tradeItem.m_shared.m_name, tradeItem.GetTooltip(), __instance.m_tooltipAnchor);
                 TMP_Text component3 = element.transform.Find("coin_bkg").Find("price").GetComponent<TMP_Text>();
-                component3.text = ItemPrice(tradeItem).ToString();
+                component3.text = itemPrice.ToString();
+                if (!canSell)
+                {
+                    component3.color = Color.grey;
+                }
 
                 element.GetComponent<Button>().onClick.AddListener(delegate
                 {
@@ -219,16 +247,6 @@ namespace TradersExtended
 
         public static void UpdateSellButton(StoreGui __instance)
         {
-            int coins = 0;
-            for (int i = m_tempItems.Count - 1; i >= 0; i--)
-            {
-                ItemDrop.ItemData tradeItem = m_tempItems[i];
-                if (tradeItem.m_shared.m_name != __instance.m_coinPrefab.m_itemData.m_shared.m_name)
-                    coins += ItemPrice(tradeItem) * Mathf.CeilToInt(Player.m_localPlayer.GetInventory().CountItems(tradeItem.m_shared.m_name) / ItemStack(tradeItem));
-            }
-
-            sellPanel.transform.Find("coins").Find("coins").GetComponent<TMP_Text>().text = coins.ToString();
-
             sellButton.interactable = selectedItem != null;
         }
 
@@ -262,19 +280,6 @@ namespace TradersExtended
             return 1;
         }
 
-        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.SellItem))]
-        public static class StoreGui_SellItem_Patch
-        {
-            static bool Prefix(StoreGui __instance)
-            {
-                if (!modEnabled.Value) return true;
-
-                SellSelectedItem(__instance);
-
-                return false;
-            }
-        }
-
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Awake))]
         public static class StoreGui_Awake_Patch
         {
@@ -295,8 +300,7 @@ namespace TradersExtended
                 UnityEngine.Object.Destroy(sellPanel.transform.Find("bkg").gameObject);
 
                 // Set trader and player names
-                RectTransform topic = __instance.m_rootPanel.transform.Find("topic").GetComponent<RectTransform>();
-                storeName = topic.GetComponent<TMP_Text>();
+                storeName = __instance.m_rootPanel.transform.Find("topic").GetComponent<RectTransform>().GetComponent<TMP_Text>();
                 playerName = sellPanel.transform.Find("topic").GetComponent<TMP_Text>();
 
                 // Prepare new sell button
@@ -304,22 +308,23 @@ namespace TradersExtended
                 sellPanelTransform.Find("Text").GetComponent<TMP_Text>().SetText(Localization.instance.Localize("$store_sell"));
                 sellPanelTransform.GetComponent<UIGamePad>().m_zinputKey = "JoyButtonX";
 
-                // Make sell button to repair button
+                // Make sell button into repair button
                 RepairPanel.RepurposeSellButton(__instance);
 
                 // Set handler to sell button
                 sellButton = sellPanelTransform.GetComponent<Button>();
-                sellButton.onClick.RemoveAllListeners();
+                sellButton.onClick.SetPersistentListenerState(0, UnityEngine.Events.UnityEventCallState.Off);
                 sellButton.onClick.AddListener(delegate
                 {
                     __instance.OnSellItem();
                 });
 
-                // Extend the border 
-                __instance.m_rootPanel.transform.Find("border (1)").GetComponent<RectTransform>().anchorMax = new Vector2(2, 1);
+                playerCoins = sellPanel.transform.Find("coins/coins").GetComponent<TMP_Text>();
+                traderCoins = __instance.m_coinText;
+                traderCoinsPanel = __instance.m_rootPanel.transform.Find("coins").gameObject;
 
-                /*topic.anchorMin = new Vector2(0.5f, 1);
-                topic.anchorMax = new Vector2(1.5f, 1);*/
+                // Extend the borders
+                __instance.m_rootPanel.transform.Find("border (1)").GetComponent<RectTransform>().anchorMax = new Vector2(2, 1);
 
                 AmountDialog.Init(__instance);
 
@@ -373,17 +378,39 @@ namespace TradersExtended
         public static class Trader_GetAvailableItems_FillBuyableItems
         {
             [HarmonyPriority(Priority.First)]
-            static void Postfix(Trader __instance, ref List<Trader.TradeItem> __result)
+            static void Postfix(Trader __instance, List<Trader.TradeItem> __result)
             {
                 if (!modEnabled.Value) return;
 
-                AddAvailableItems(CommonListKey(ItemsListType.Buy), ref __result);
+                AddAvailableItems(CommonListKey(ItemsListType.Buy), __result);
 
-                AddAvailableItems(TraderListKey(__instance.m_name, ItemsListType.Buy), ref __result);
+                AddAvailableItems(TraderListKey(__instance.m_name, ItemsListType.Buy), __result);
             }
         }
 
-        private static void AddAvailableItems(string listKey, ref List<Trader.TradeItem> __result)
+        [HarmonyPatch(typeof(Trader), nameof(Trader.GetAvailableItems))]
+        public static class Trader_GetAvailableItems_
+        {
+            [HarmonyPriority(Priority.Last)]
+            static void Postfix(Trader __instance, List<Trader.TradeItem> __result)
+            {
+                if (!modEnabled.Value)
+                    return;
+
+                if (!traderUseFlexiblePricing.Value)
+                    return;
+
+                // Make copy to not alter original prices
+                for (int i = 0; i < __result.Count; i++)
+                    __result[i] = JsonUtility.FromJson<Trader.TradeItem>(JsonUtility.ToJson(__result[i]));
+
+                float factor = GetTraderBuyPriceFactor(GetTraderCoins());
+                foreach (Trader.TradeItem item in __result)
+                    item.m_price = Math.Max((int)(item.m_price * factor), 1);
+            }
+        }
+
+        private static void AddAvailableItems(string listKey, List<Trader.TradeItem> __result)
         {
             if (!tradeableItems.ContainsKey(listKey))
                 return;
@@ -455,11 +482,64 @@ namespace TradersExtended
                 if (!__instance.m_rootPanel.activeSelf)
                     return;
 
-                storeName.SetText(trader.GetHoverName());
-                playerName.SetText(Player.m_localPlayer.GetPlayerName());
-
                 sellPanel.SetActive(value: true);
+                traderCoinsPanel.SetActive(traderUseCoins.Value);
+
+                traderNetView = trader.GetComponent<ZNetView>();
+
+                UpdateNames();
             }
+        }
+
+        private static void UpdateNames()
+        {
+            string traderTopic = StoreGui.instance.m_trader?.GetHoverName();
+            string playerTopic = Player.m_localPlayer.GetPlayerName();
+
+            if (traderUseCoins.Value && traderUseFlexiblePricing.Value)
+            {
+                int coins = GetTraderCoins();
+                traderTopic += GetPriceFactorString(GetTraderBuyPriceFactor(coins), reversed:true);
+                playerTopic += GetPriceFactorString(GetTraderSellPriceFactor(coins));
+            }
+
+            storeName.SetText(traderTopic);
+            playerName.SetText(playerTopic);
+        }
+
+        private static string GetPriceFactorString(float factor, bool reversed = false)
+        {
+            if (factor == 1f)
+                return "";
+
+            return $" · <color={((reversed && factor < 1) || (!reversed && factor > 1) ? "green" : "red")}>{(factor - 1f) * 100f:+0;-0}</color>%";
+        }
+
+        private static float GetTraderBuyPriceFactor(int coins)
+        {
+            if (!traderUseFlexiblePricing.Value)
+                return 1f;
+
+            if (coins < traderCoinsMinimumAmount.Value)
+                return RoundFactorToPercent(Mathf.Lerp(traderMarkup.Value, 1f, (float)coins / traderCoinsMinimumAmount.Value));
+
+            return RoundFactorToPercent(Mathf.Lerp(1f, traderDiscount.Value, (float)(coins - traderCoinsMinimumAmount.Value) / (traderCoinsMaximumAmount.Value - traderCoinsMinimumAmount.Value)));
+        }
+
+        public static float GetTraderSellPriceFactor(int coins)
+        {
+            if (!traderUseFlexiblePricing.Value)
+                return 1f;
+
+            if (coins < traderCoinsMinimumAmount.Value)
+                return RoundFactorToPercent(Mathf.Lerp(traderDiscount.Value, 1f, (float)coins / traderCoinsMinimumAmount.Value));
+
+            return RoundFactorToPercent(Mathf.Lerp(1f, traderMarkup.Value, (float)(coins - traderCoinsMinimumAmount.Value) / (traderCoinsMaximumAmount.Value - traderCoinsMinimumAmount.Value)));
+        }
+
+        private static float RoundFactorToPercent(float factor)
+        {
+            return Mathf.Round(factor * 100f) / 100f;
         }
 
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Hide))]
@@ -472,27 +552,145 @@ namespace TradersExtended
 
                 sellPanel.SetActive(value: false);
                 AmountDialog.Close();
+
+                UpdateTraderCoins();
+
+                traderNetView = null;
             }
         }
 
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.UpdateRecipeGamepadInput))]
-        public static class StoreGui_UpdateRecipeGamepadInput_Patch
+        public static class StoreGui_UpdateRecipeGamepadInput_SellListGamepadNavigation
         {
             static void Postfix()
             {
-                if (!modEnabled.Value) return;
+                if (!modEnabled.Value)
+                    return;
 
-                if (sellItemList.Count > 0)
+                if (sellItemList.Count == 0)
+                    return;
+
+                if (ZInput.GetButtonDown("JoyRStickDown") || ZInput.GetButtonDown("JoyDPadDown") && ZInput.GetButtonDown("JoyAltPlace"))
+                    SelectItem(Mathf.Min(sellItemList.Count - 1, GetSelectedItemIndex() + 1), center: true);
+
+                if (ZInput.GetButtonDown("JoyRStickUp") || ZInput.GetButtonDown("JoyDPadUp") && ZInput.GetButtonDown("JoyAltPlace"))
+                    SelectItem(Mathf.Max(0, GetSelectedItemIndex() - 1), center: true);
+            }
+        }
+
+        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Update))]
+        public static class StoreGui_Update_CoinsUpdate
+        {
+            static void Postfix(StoreGui __instance)
+            {
+                if (!modEnabled.Value)
+                    return;
+
+                if (!__instance.m_rootPanel.activeSelf)
+                    return;
+
+                playerCoins.SetText(__instance.GetPlayerCoins().ToString());
+
+                if (traderUseCoins.Value && traderNetView != null && traderNetView.IsValid())
+                    traderCoins.SetText(GetTraderCoins().ToString());
+            }
+        }
+
+        public static void UpdateTraderCoins(int amount = 0)
+        {
+            if (!traderUseCoins.Value)
+                return;
+
+            if (traderNetView == null)
+                traderNetView = StoreGui.instance.m_trader?.GetComponent<ZNetView>();
+
+            if (!traderNetView.IsValid())
+                return;
+
+            traderNetView.GetZDO().Set(s_traderCoins, GetTraderCoins() + amount);
+
+            if (StoreGui.instance.m_rootPanel.activeSelf)
+                UpdateNames();
+        }
+
+        public static int GetTraderCoins()
+        {
+            if (traderNetView == null)
+                traderNetView = StoreGui.instance.m_trader?.GetComponent<ZNetView>();
+
+            if (traderNetView == null || !traderNetView.IsValid())
+                return traderCoinsMinimumAmount.Value;
+
+            return traderNetView.GetZDO().GetInt(s_traderCoins, traderCoinsMinimumAmount.Value);
+        }
+
+        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.SellItem))]
+        public static class StoreGui_SellItem_Patch
+        {
+            static bool Prefix(StoreGui __instance)
+            {
+                if (!modEnabled.Value)
+                    return true;
+
+                SellSelectedItem(__instance);
+
+                return false;
+            }
+        }
+
+        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.BuySelectedItem))]
+        public static class StoreGui_BuySelectedItem_TraderCoinsUpdate
+        {
+            public static bool isCalled = false;
+
+            public static void Prefix() => isCalled = modEnabled.Value;
+
+            public static void Postfix() => isCalled = false;
+        }
+
+        [HarmonyPatch(typeof(Trader), nameof(Trader.OnBought))]
+        public static class StoreGui_OnBought_TraderCoinsUpdate
+        {
+            public static void Postfix(Trader.TradeItem item) 
+            {
+                if (StoreGui_BuySelectedItem_TraderCoinsUpdate.isCalled)
+                    UpdateTraderCoins(item.m_price);
+            }
+        }
+
+        [HarmonyPatch(typeof(EnvMan), nameof(EnvMan.OnMorning))]
+        public static class EnvMan_OnMorning_TraderCoinsUpdate
+        {
+            public static void Postfix(EnvMan __instance)
+            {
+                if (!traderUseCoins.Value)
+                    return;
+
+                MessageHud.instance?.ShowMessage(MessageHud.MessageType.TopLeft, "$store_topic. $msg_added: $item_coins");
+
+                if (!ZNet.instance.IsServer())
+                    return;
+
+                HashSet<int> traderPrefabs = new HashSet<int>(tradersCustomPrefabs.Value.Split(',').Select(p => p.Trim()).Where(p => !string.IsNullOrWhiteSpace(p)).Select(selector => selector.GetStableHashCode()).ToList())
                 {
-                    if (ZInput.GetButtonDown("JoyRStickDown") || ZInput.GetButtonDown("JoyDPadDown") && ZInput.GetButtonDown("JoyAltPlace"))
-                    {
-                        SelectItem(Mathf.Min(sellItemList.Count - 1, GetSelectedItemIndex() + 1), center: true);
-                    }
+                    "Haldor".GetStableHashCode(),
+                    "Hildir".GetStableHashCode()
+                };
 
-                    if (ZInput.GetButtonDown("JoyRStickUp") || ZInput.GetButtonDown("JoyDPadUp") && ZInput.GetButtonDown("JoyAltPlace"))
-                    {
-                        SelectItem(Mathf.Max(0, GetSelectedItemIndex() - 1), center: true);
-                    }
+                foreach (ZDO zdo in ZDOMan.instance.m_objectsByID.Values.Where(zdo => traderPrefabs.Contains(zdo.GetPrefab())))
+                {
+                    int coinsReplenished = zdo.GetInt(s_traderCoinsReplenished);
+                    if (__instance.GetCurrentDay() - coinsReplenished < traderCoinsReplenishmentRate.Value)
+                        continue;
+
+                    int current = zdo.GetInt(s_traderCoins);
+                    if (current >= traderCoinsMaximumAmount.Value)
+                        continue;
+
+                    int newAmount = Mathf.Clamp(current + traderCoinsIncreaseAmount.Value, traderCoinsMinimumAmount.Value, traderCoinsMaximumAmount.Value);
+                    zdo.Set(s_traderCoins, newAmount);
+                    zdo.Set(s_traderCoinsReplenished, __instance.GetCurrentDay());
+                    LogInfo($"{zdo} coins updated {current} -> {newAmount}");
                 }
             }
         }

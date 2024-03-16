@@ -55,11 +55,11 @@ namespace TradersExtended
             {
                 OnSelectedTradeableItemDblClick(storeGui);
                 leftClickTime = 0f;
-                selectedItem = null;
+                //selectedItem = null;
             }
             else
             {
-                selectedItem = storeGui.m_selectedItem;
+                //selectedItem = storeGui.m_selectedItem;
                 leftClickTime = Time.time;
             }
         }
@@ -123,8 +123,8 @@ namespace TradersExtended
 
         private static void OnSelectedTradeableItemDblClick(StoreGui __instance)
         {
-            if (selectedItem != __instance.m_selectedItem)
-                return;
+            selectedItem = __instance.m_selectedItem;
+                //return; */
 
             int playerCoins = __instance.GetPlayerCoins();
 
@@ -166,7 +166,12 @@ namespace TradersExtended
                 int variant = __instance.m_selectedItem.m_prefab.m_itemData.m_variant;
                 if (Player.m_localPlayer.GetInventory().AddItem(__instance.m_selectedItem.m_prefab.name, stack, quality, variant, 0L, "") != null)
                 {
-                    Player.m_localPlayer.GetInventory().RemoveItem(__instance.m_coinPrefab.m_itemData.m_shared.m_name, __instance.m_selectedItem.m_price * stack);
+                    int coins = __instance.m_selectedItem.m_price * stack;
+
+                    Player.m_localPlayer.GetInventory().RemoveItem(__instance.m_coinPrefab.m_itemData.m_shared.m_name, coins);
+                    
+                    StorePanel.UpdateTraderCoins(coins);
+
                     __instance.m_trader.OnBought(__instance.m_selectedItem);
                     __instance.m_buyEffects.Create((__instance as MonoBehaviour).transform.position, Quaternion.identity);
                     Player.m_localPlayer.ShowPickupMessage(__instance.m_selectedItem.m_prefab.m_itemData, stack);
