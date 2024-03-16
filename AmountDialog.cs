@@ -16,6 +16,7 @@ namespace TradersExtended
         private static TMP_Text sliderTitle;
         private static TMP_Text sliderAmountText;
         private static Image sliderImage;
+        private static string sliderTitleText;
 
         private const float m_splitNumInputTimeoutSec = 0.5f;
         private static string m_splitInput = "";
@@ -60,7 +61,14 @@ namespace TradersExtended
             else
             {
                 leftClickTime = Time.time;
+                if (ZInput.GetButton("JoyButtonA") && !IsOpen())
+                    Open(storeGui);
             }
+        }
+
+        public static bool IsOpen()
+        {
+            return amountDialog.activeSelf;
         }
 
         public static void Update()
@@ -77,6 +85,10 @@ namespace TradersExtended
 
             if (!sliderDialog.gameObject.activeInHierarchy)
                 return;
+
+            //if ()
+
+            sliderTitle.SetText(sliderTitleText);
 
             for (int i = 0; i < 10; i++)
             {
@@ -113,6 +125,12 @@ namespace TradersExtended
             {
                 BuySelectedItem(StoreGui.instance);
             }
+
+            if ((Chat.instance == null || !Chat.instance.HasFocus()) && !Console.IsVisible() && !Menu.IsVisible() && (bool)TextViewer.instance && !TextViewer.instance.IsVisible() && !localPlayer.InCutscene() && (ZInput.GetButtonDown("JoyButtonB") || ZInput.GetKeyDown(KeyCode.Escape)))
+            {
+                ZInput.ResetButtonStatus("JoyButtonB");
+                Close();
+            }
         }
 
         public static void Close()
@@ -142,8 +160,8 @@ namespace TradersExtended
             sliderDialog.maxValue = Math.Min(selectedItem.m_prefab.m_itemData.m_shared.m_maxStackSize, Mathf.CeilToInt(playerCoins / selectedItem.m_price));
             sliderDialog.value = 1;
 
-            sliderTitle.SetText($"{Localization.instance.Localize("$store_buy")} {Localization.instance.Localize(selectedItem.m_prefab.m_itemData.m_shared.m_name)}");
             sliderImage.sprite = selectedItem.m_prefab.m_itemData.GetIcon();
+            sliderTitleText = $"{Localization.instance.Localize("$store_buy")} {Localization.instance.Localize(selectedItem.m_prefab.m_itemData.m_shared.m_name)}";
 
             OnSplitSliderChanged();
 

@@ -6,7 +6,6 @@ using TMPro;
 using UnityEngine.UI;
 using UnityEngine;
 using static TradersExtended.TradersExtended;
-using System.Reflection;
 
 namespace TradersExtended
 {
@@ -20,6 +19,7 @@ namespace TradersExtended
         private static TMP_Text playerCoins;
         private static TMP_Text traderCoins;
         private static GameObject traderCoinsPanel;
+        private static ScrollRectEnsureVisible m_itemEnsureVisible;
 
         private static bool epicLootEnabled;
 
@@ -71,7 +71,7 @@ namespace TradersExtended
             }
 
             if (center && index >= 0)
-                StoreGui.instance.m_itemEnsureVisible.CenterOnItem(sellItemList[index].transform as RectTransform);
+                m_itemEnsureVisible.CenterOnItem(sellItemList[index].transform as RectTransform);
 
             if (index < 0)
                 selectedItem = null;
@@ -290,7 +290,7 @@ namespace TradersExtended
                 // Add copy of main panel
                 sellPanel = UnityEngine.Object.Instantiate(__instance.m_rootPanel, __instance.m_rootPanel.transform);
                 sellPanel.transform.localPosition = new Vector3(250, 0, 0);
-
+                
                 // Remove redundant objects
                 UnityEngine.Object.Destroy(sellPanel.transform.Find("SellPanel").gameObject);
                 UnityEngine.Object.Destroy(sellPanel.transform.Find("border (1)").gameObject);
@@ -302,6 +302,9 @@ namespace TradersExtended
                 playerCoins = sellPanel.transform.Find("coins/coins").GetComponent<TMP_Text>();
                 traderCoins = __instance.m_coinText;
                 traderCoinsPanel = __instance.m_rootPanel.transform.Find("coins").gameObject;
+
+                // Link ScrollRectEnsureVisible component
+                m_itemEnsureVisible = sellPanel.transform.Find("ItemList/Items").GetComponent<ScrollRectEnsureVisible>();
 
                 // Prepare new sell button
                 Transform sellPanelTransform = sellPanel.transform.Find("BuyButton");
@@ -324,8 +327,8 @@ namespace TradersExtended
                 Vector3 position = component.m_hint.transform.localPosition;
                 UnityEngine.Object.Destroy(component.m_hint);
 
-                GameObject hint = UnityEngine.Object.Instantiate(InventoryGui.instance.m_craftButton.GetComponent<UIGamePad>().m_hint, sellButton.transform);
-                hint.transform.localPosition = position;
+                component.m_hint = UnityEngine.Object.Instantiate(InventoryGui.instance.m_craftButton.GetComponent<UIGamePad>().m_hint, sellButton.transform);
+                component.m_hint.transform.localPosition = position;
 
                 // Extend the borders
                 __instance.m_rootPanel.transform.Find("border (1)").GetComponent<RectTransform>().anchorMax = new Vector2(2, 1);
@@ -556,12 +559,27 @@ namespace TradersExtended
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Hide))]
         public static class StoreGui_Hide_Patch
         {
-            static void Postfix()
+            private static bool Prefix(StoreGui __instance)
+            {
+                if (!modEnabled.Value)
+                    return true;
+
+                if (AmountDialog.IsOpen())
+                    return false;
+
+                return true;
+            }
+
+            private static void Postfix(StoreGui __instance)
             {
                 if (!modEnabled.Value)
                     return;
 
+                if (__instance.m_rootPanel.activeSelf)
+                    return;
+
                 sellPanel.SetActive(value: false);
+                
                 AmountDialog.Close();
 
                 UpdateTraderCoins();
@@ -573,25 +591,37 @@ namespace TradersExtended
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.UpdateRecipeGamepadInput))]
         public static class StoreGui_UpdateRecipeGamepadInput_SellListGamepadNavigation
         {
-            static void Postfix(StoreGui __instance)
+            static bool Prefix(StoreGui __instance)
             {
                 if (!modEnabled.Value)
-                    return;
+                    return true;
+
+                if (AmountDialog.IsOpen() || Console.IsVisible())
+                    return false;
 
                 if (sellItemList.Count == 0)
-                    return;
+                    return true;
 
-                if (ZInput.GetButtonDown("JoyRStickDown") || ZInput.GetButtonDown("JoyDPadDown") && ZInput.GetButtonDown("JoyAltPlace"))
+                if (ZInput.GetButtonDown("JoyRStickDown") || ZInput.GetButtonDown("JoyDPadDown") && ZInput.GetButton("JoyLTrigger"))
+                {
                     SelectItem(Mathf.Min(sellItemList.Count - 1, GetSelectedItemIndex() + 1), center: true);
+                    return false;
+                }
 
-                if (ZInput.GetButtonDown("JoyRStickUp") || ZInput.GetButtonDown("JoyDPadUp") && ZInput.GetButtonDown("JoyAltPlace"))
+                if (ZInput.GetButtonDown("JoyRStickUp") || ZInput.GetButtonDown("JoyDPadUp") && ZInput.GetButton("JoyLTrigger"))
+                {
                     SelectItem(Mathf.Max(0, GetSelectedItemIndex() - 1), center: true);
+                    return false;
+                }
 
-                if (ZInput.GetButtonDown("JoyButtonA") && ZInput.GetButtonDown("JoyAltPlace"))
+                if (ZInput.GetButtonDown("JoyButtonA") && ZInput.GetButton("JoyLTrigger"))
                 {
                     AmountDialog.Open(__instance);
                     ZInput.ResetButtonStatus("JoyButtonA");
+                    return false;
                 }
+
+                return true;
             }
         }
 
@@ -651,7 +681,8 @@ namespace TradersExtended
                 if (!modEnabled.Value)
                     return true;
 
-                SellSelectedItem(__instance);
+                if (!AmountDialog.IsOpen())
+                    SellSelectedItem(__instance);
 
                 return false;
             }
@@ -662,7 +693,17 @@ namespace TradersExtended
         {
             public static bool isCalled = false;
 
-            public static void Prefix() => isCalled = modEnabled.Value;
+            public static bool Prefix()
+            {
+                if (!modEnabled.Value)
+                    return true;
+
+                if (AmountDialog.IsOpen())
+                    return false;
+
+                isCalled = true;
+                return true;
+            }
 
             public static void Postfix() => isCalled = false;
         }
