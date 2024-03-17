@@ -1,5 +1,5 @@
-﻿# Traders Extended
-![logo](https://staticdelivery.nexusmods.com/mods/3667/images/headers/2509_1694134634.jpg)
+# Traders Extended
+![logo](https://staticdelivery.nexusmods.com/mods/3667/images/headers/2509_1710675587.jpg)
 
 Trader specific buy and sell lists extended. Store UI extended. Sellable items listed next to tradeable with option to sell exact item.
 
@@ -25,6 +25,37 @@ A bit more functional than another "simple" trader mods.
 * trader could give a discount or set a markup depending on current amount of coins
 * you can filter both buy and sell list by item name
 * you can customize coins weight and exact stack size
+
+## Check for discovery
+
+Traders will wait for item discovery before it appears in the store.
+
+To exclude some item from that rule you can set its prefab name in "Undiscovered items list to sell" config.
+
+Vanilla items will always be there (if global key met).
+
+## Repair
+
+Trader will repair your items for 2 coins each. You can set cost in coins.
+
+Set trader name or its prefab name in the appropriate list for it to repair set type of items. Weapons or Armor.
+
+## Trader use coins
+
+You can enable traders to use limited amount of coins. When you sell item trader will spend its coins. When you buy item trader will receive your coins.
+
+Every morning (at set replenishment rate) every trader will be given settable amount of coins until it have set maximum amount of coins.
+
+If trader have more coins than minimum amount - sell price will be raised and buy price reduced. If trader have less coins than minimum - sell price will be reduced and buy prices increased.
+
+If you want custom traders to operate coins you must set its prefab name in "Custom traders prefab names" config. Case sensitive, comma separated.
+
+Defaults:
+* trader have 2000 coins
+* trader will replenish 1000 coins every morning until it have 6000 coins
+* if trader have 0 coins markup for buy prices will be +50% and sell prices -30%
+* if trader have 6000 coins discount for buy prices will be -30% and sell prices will be increased to +50%
+* normal prices will be at 2000 coins and will gradually change
 
 ## Gamepad support
 * use right gamepad stick to scroll sell list
