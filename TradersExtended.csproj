@@ -63,6 +63,10 @@
       <HintPath>Libs\ServerSync.dll</HintPath>
     </Reference>
     <Reference Include="System" />
+    <Reference Include="ui_lib, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>F:\Steam\steamapps\common\Valheim\valheim_Data\Managed\ui_lib.dll</HintPath>
+    </Reference>
     <Reference Include="Unity.TextMeshPro, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>F:\Steam\steamapps\common\Valheim\valheim_Data\Managed\Unity.TextMeshPro.dll</HintPath>
@@ -86,8 +90,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AmountDialog.cs" />
+    <Compile Include="CoinsPatches.cs" />
     <Compile Include="StorePanel.cs" />
     <Compile Include="RepairPanel.cs" />
+    <Compile Include="TraderCoins.cs" />
     <Compile Include="TradersExtended.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

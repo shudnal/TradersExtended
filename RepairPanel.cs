@@ -16,7 +16,7 @@ namespace TradersExtended
         private static Button repairButton;
         private static EffectList repairItemDoneEffects;
 
-        public static void RepurposeSellButton(StoreGui storeGui)
+        public static GameObject RepurposeSellButton(StoreGui storeGui)
         {
             repairPanel = storeGui.m_rootPanel.transform.Find("SellPanel").gameObject;
             repairPanel.transform.localPosition = new Vector3(592, -603, 0);
@@ -40,6 +40,8 @@ namespace TradersExtended
             repairButton.GetComponent<UITooltip>().Set("", "$inventory_repairbutton");
 
             Update(storeGui);
+
+            return repairPanel;
         }
 
         public static void AddButtonBlocker(GameObject blocker)
@@ -81,7 +83,7 @@ namespace TradersExtended
 
                 repairItemDoneEffects?.Create(Player.m_localPlayer.transform.position, Quaternion.identity);
 
-                StorePanel.UpdateTraderCoins(Math.Abs(traderRepairCost.Value));
+                TraderCoins.UpdateTraderCoins(Math.Abs(traderRepairCost.Value));
 
                 storeGui.m_sellEffects.Create(storeGui.transform.position, Quaternion.identity);
                 

@@ -51,7 +51,12 @@ namespace TradersExtended
         public static ConfigEntry<float> traderMarkup;
         public static ConfigEntry<int> traderCoinsReplenishmentRate;
 
+        public static ConfigEntry<bool> coinsPatch;
+        public static ConfigEntry<float> coinsWeight;
+        public static ConfigEntry<int> coinsStackSize;
+
         public static ConfigEntry<string> tradersCustomPrefabs;
+        public static ConfigEntry<bool> disableVanillaItems;
 
         public static readonly Dictionary<string, List<TradeableItem>> tradeableItems = new Dictionary<string, List<TradeableItem>>();
         public static readonly Dictionary<string, List<TradeableItem>> sellableItems = new Dictionary<string, List<TradeableItem>>();
@@ -124,6 +129,10 @@ namespace TradersExtended
 
             checkForDiscoveryIgnoreItems.SettingChanged += (sender, args) => FillConfigLists();
 
+            coinsPatch = config("Item coins", "Change values", defaultValue: false, "Change properties of coins item");
+            coinsWeight = config("Item coins", "Coins weight", defaultValue: 0f, "Weight of single coin");
+            coinsStackSize = config("Item coins", "Coins stack size", defaultValue: 2000, "Max size of coins stack");
+
             traderRepair = config("Trader repair", "Traders can repair items", defaultValue: true, "Traders will have an ability to repair items");
             tradersToRepairWeapons = config("Trader repair", "Traders capable to repair weapons", defaultValue: "$npc_haldor", "Traders that have an ability to repair weapons");
             tradersToRepairArmor = config("Trader repair", "Traders capable to repair armor", defaultValue: "$npc_hildir", "Traders that have an ability to repair armor");
@@ -142,7 +151,8 @@ namespace TradersExtended
             traderMarkup = config("Trader coins pricing", "Trader markup", defaultValue: 1.5f, "Markup for items to buy from trader when current amount of coins is less than minimum replenishment amount.");
             traderCoinsReplenishmentRate = config("Trader coins pricing", "Trader coins replenishment rate in days", defaultValue: 1, "Amount of coins is updated at morning");
 
-            tradersCustomPrefabs = config("Traders custom prefab names", "List", defaultValue: "", "List of custom prefab names of Trader added by mods to control coins. Prefab name, case sensitive, comma separated");
+            tradersCustomPrefabs = config("Misc", "Custom traders prefab names", defaultValue: "", "List of custom prefab names of Trader added by mods to control coins. Prefab name, case sensitive, comma separated");
+            disableVanillaItems = config("Misc", "Disable vanilla items", defaultValue: false, "Disable vanilla items on traders. Custom traders could or could not work depending on their implementation.");
 
             InitCommands();
         }

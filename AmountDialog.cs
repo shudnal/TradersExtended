@@ -86,8 +86,6 @@ namespace TradersExtended
             if (!sliderDialog.gameObject.activeInHierarchy)
                 return;
 
-            //if ()
-
             sliderTitle.SetText(sliderTitleText);
 
             for (int i = 0; i < 10; i++)
@@ -140,6 +138,9 @@ namespace TradersExtended
 
         public static void Open(StoreGui __instance)
         {
+            if (!Player.m_localPlayer.GetInventory().HaveEmptySlot())
+                return;
+
             Trader.TradeItem selectedItem = __instance.m_selectedItem;
 
             int playerCoins = __instance.GetPlayerCoins();
@@ -186,7 +187,7 @@ namespace TradersExtended
 
                     Player.m_localPlayer.GetInventory().RemoveItem(__instance.m_coinPrefab.m_itemData.m_shared.m_name, coins);
                     
-                    StorePanel.UpdateTraderCoins(coins);
+                    TraderCoins.UpdateTraderCoins(coins);
 
                     __instance.m_trader.OnBought(__instance.m_selectedItem);
                     __instance.m_buyEffects.Create((__instance as MonoBehaviour).transform.position, Quaternion.identity);
@@ -201,7 +202,7 @@ namespace TradersExtended
         private static bool CanAffordSelectedItem(StoreGui __instance)
         {
             int playerCoins = __instance.GetPlayerCoins();
-            return __instance.m_selectedItem.m_price * sliderDialog.value <= playerCoins;
+            return __instance.m_selectedItem.m_price * sliderDialog.value <= playerCoins && Player.m_localPlayer.GetInventory().HaveEmptySlot();
         }
 
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.OnSelectedItem))]

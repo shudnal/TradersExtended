@@ -1,10 +1,13 @@
 # 1.1.0
-* full gamepad support
 * trader will wait for items discovery
-* trader will repair your stuff for coins
-* trader could have limited replenished amount of coins
-* trader could give discounts and set markups
+* trader can repair your stuff for coins
+* trader can have limited replenished amount of coins
+* trader can give discounts and set markups
 * JSON configs could be stored both next to dll and in config folder
+* full gamepad support (except filter fields)
+* configurable weight and stack size of coins
+* vanilla items could be disabled
+* lots of refinements and improvements
 
 # 1.0.21
 * refinements for shared config files reading

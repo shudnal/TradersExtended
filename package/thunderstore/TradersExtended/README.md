@@ -1,4 +1,4 @@
-# Traders Extended
+﻿# Traders Extended
 ![logo](https://staticdelivery.nexusmods.com/mods/3667/images/headers/2509_1694134634.jpg)
 
 Trader specific buy and sell lists extended. Store UI extended. Sellable items listed next to tradeable with option to sell exact item.
@@ -7,7 +7,7 @@ Trader specific buy and sell lists extended. Store UI extended. Sellable items l
 
 Yet another trader mod.
 
-Less bloated then BetterTrader if your needs are much smaller than economics simulating.
+Less bloated then BetterTrader if your needs are smaller than complete economics simulating.
 
 A bit more functional than another "simple" trader mods.
 
@@ -17,13 +17,21 @@ A bit more functional than another "simple" trader mods.
 * live update on config changes
 * server synced config
 * configs saved as JSON files 
-* config could be stored next to dll, in config folder in any subdirectory or even embedded into dll
+* config could be stored next to dll, in config folder in any subdirectory or even be embedded into dll
 * configurable items are added to current lists (not replacing current vanilla items)
 * double click on stackable item you want to buy to enter needed items amount
-* use right gamepad stick to scroll sell list. Use (X) to sell selected item (ignore button hint for now)
-* trader could repair your armor or weapons for coins (by default Haldor repair weapons and Hildir armor)
+* trader could repair your armor or weapons for coins (by default Haldor repair weapons and Hildir repair armor)
 * trader could have limited replenished amount of coins
 * trader could give a discount or set a markup depending on current amount of coins
+* you can filter both buy and sell list by item name
+* you can customize coins weight and exact stack size
+
+## Gamepad support
+* use right gamepad stick to scroll sell list
+* hold Left trigger to scroll sell list using DPad up and down
+* Use (X) for XBox, (☐) for PS to sell selected item
+* hold Left trigger and press (A) for XBox, (X) for PS to open items amount dialog
+* use Right Stick click to repair item
 
 ## Config file names
 * are case insensitive for Windows
@@ -96,7 +104,7 @@ Create new config file next to dll or in BepInEx\Config\ folder to add items.
 
 ## Compatibility
 * The mod should be compatible with any mods changing item prices to make it sellable and extending tradeable item lists
-* Incompatible with any mod hiding vanilla store UI (straight incompatible with AUGA)
+* Incompatible with any mod altering vanilla store UI (straight incompatible with AUGA)
 * The mod should be compatible with mods adding more traders with unique names (until they use vanilla store UI)
 * The mod should be compatible with mods adding more items to store (until its patches are noninvasive)
 
