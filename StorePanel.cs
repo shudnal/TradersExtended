@@ -706,6 +706,8 @@ namespace TradersExtended
 
                 if (___m_itemList.Count == 0)
                     index = -1;
+                else
+                    index = Mathf.Clamp(index, 0, ___m_itemList.Count - 1);
 
                 center = center || index == 0;
             }

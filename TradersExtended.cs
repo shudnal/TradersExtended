@@ -20,7 +20,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.1.0";
+        private const string pluginVersion = "1.1.1";
 
         private Harmony harmony;
 

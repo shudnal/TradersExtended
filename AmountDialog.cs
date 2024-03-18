@@ -68,11 +68,14 @@ namespace TradersExtended
 
         public static bool IsOpen()
         {
-            return amountDialog.activeSelf;
+            return amountDialog != null && amountDialog.activeSelf;
         }
 
         public static void Update()
         {
+            if (amountDialog == null)
+                return;
+
             Player localPlayer = Player.m_localPlayer;
             if (localPlayer == null || localPlayer.IsDead() || localPlayer.InCutscene() || localPlayer.IsTeleporting())
             {
@@ -133,11 +136,15 @@ namespace TradersExtended
 
         public static void Close()
         {
-            amountDialog?.SetActive(value: false);
+            if (amountDialog != null)
+                amountDialog.SetActive(value: false);
         }
 
         public static void Open(StoreGui __instance)
         {
+            if (amountDialog == null)
+                return;
+
             if (!Player.m_localPlayer.GetInventory().HaveEmptySlot())
                 return;
 
@@ -190,7 +197,7 @@ namespace TradersExtended
                     TraderCoins.UpdateTraderCoins(coins);
 
                     __instance.m_trader.OnBought(__instance.m_selectedItem);
-                    __instance.m_buyEffects.Create((__instance as MonoBehaviour).transform.position, Quaternion.identity);
+                    __instance.m_buyEffects.Create(__instance.transform.position, Quaternion.identity);
                     Player.m_localPlayer.ShowPickupMessage(__instance.m_selectedItem.m_prefab.m_itemData, stack);
                     __instance.FillList();
                     Gogan.LogEvent("Game", "BoughtItem", __instance.m_selectedItem.m_prefab.name, 0L);

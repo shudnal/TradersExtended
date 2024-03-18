@@ -51,7 +51,7 @@ namespace TradersExtended
 
         public static void Update(StoreGui storeGui)
         {
-            if (!StoreGui.IsVisible())
+            if (StoreGui.instance == null || !StoreGui.instance.m_rootPanel.activeSelf)
                 return;
 
             repairPanel.SetActive(traderRepair.Value);

@@ -116,7 +116,7 @@ namespace TradersExtended
                 if (!modEnabled.Value)
                     return;
 
-                if (item == StoreGui.instance.m_selectedItem.m_prefab.m_itemData && StoreGui_BuySelectedItem_TraderCoinsUpdate.isCalled)
+                if (StoreGui.instance != null && StoreGui_BuySelectedItem_TraderCoinsUpdate.isCalled && StoreGui.instance.m_selectedItem != null && item == StoreGui.instance.m_selectedItem.m_prefab?.m_itemData)
                     amount = StoreGui.instance.m_selectedItem.m_stack;
             }
         }

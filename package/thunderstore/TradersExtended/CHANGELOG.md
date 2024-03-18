@@ -1,3 +1,6 @@
+# 1.1.1
+* minor fixes
+
 # 1.1.0
 * trader will wait for items discovery
 * trader can repair your stuff for coins
