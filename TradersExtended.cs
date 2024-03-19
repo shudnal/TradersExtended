@@ -20,7 +20,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.1.1";
+        private const string pluginVersion = "1.1.2";
 
         private Harmony harmony;
 
@@ -178,11 +178,6 @@ namespace TradersExtended
 
         public static void InitCommands()
         {
-            new Terminal.ConsoleCommand("tradersextendedsave", "Save every item from ObjectDB into file ObjectDB.list.json next to dll", args =>
-            {
-                SaveFromObjectDB(args.Context);
-            });
-
             new Terminal.ConsoleCommand("tradersextended", "[action]", delegate (Terminal.ConsoleEventArgs args)
             {
                 if (args.Length >= 2)
@@ -197,7 +192,7 @@ namespace TradersExtended
                 {
                     args.Context.AddString("Syntax: tradersextended [action]");
                 }
-            }, isCheat: false, isNetwork: false, onlyServer: false, isSecret: false, allowInDevBuild: false, () => new List<string>() { "save" }, alwaysRefreshTabOptions: true, remoteCommand: false);
+            }, isCheat: false, isNetwork: false, onlyServer: false, isSecret: false, allowInDevBuild: false, () => new List<string>() { "save  -  Save every item from ObjectDB into file ObjectDB.list.json next to dll" }, alwaysRefreshTabOptions: true, remoteCommand: false);
         }
 
         public static void SaveFromObjectDB(Terminal context)

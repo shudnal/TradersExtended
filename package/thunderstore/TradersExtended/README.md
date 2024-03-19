@@ -25,6 +25,7 @@ A bit more functional than another "simple" trader mods.
 * trader could give a discount or set a markup depending on current amount of coins
 * you can filter both buy and sell list by item name
 * you can customize coins weight and exact stack size
+* EpicLoot support (colored icons and coins spent in Adventure mode)
 
 ## Check for discovery
 

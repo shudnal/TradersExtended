@@ -7,8 +7,8 @@ namespace TradersExtended
 {
     internal class CoinsPatches
     {
-        private const string itemNameCoins = "Coins";
-        private const string itemDropNameCoins = "$item_coins";
+        public const string itemNameCoins = "Coins";
+        public const string itemDropNameCoins = "$item_coins";
 
         private static List<ItemDrop.ItemData> _itemDataList = new List<ItemDrop.ItemData>();
 

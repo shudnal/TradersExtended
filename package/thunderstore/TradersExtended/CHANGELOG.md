@@ -1,3 +1,7 @@
+# 1.1.2
+* minor fixes
+* support for spent and earned EpicLoot coins
+
 # 1.1.1
 * minor fixes
 
@@ -12,6 +16,9 @@
 * vanilla items could be disabled
 * lots of refinements and improvements
 
+<details>
+<summary><b>Changelog History</b> (<i>click to expand</i>)</summary>
+
 # 1.0.21
 * refinements for shared config files reading
 
@@ -20,9 +27,6 @@
 
 # 1.0.19
 * colored icons from epic loot
-
-<details>
-<summary><b>Changelog History</b> (<i>click to expand</i>)</summary>
 
 # 1.0.18
 * patch 0.217.38

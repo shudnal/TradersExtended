@@ -51,7 +51,7 @@ namespace TradersExtended
 
         public static void Update(StoreGui storeGui)
         {
-            if (StoreGui.instance == null || !StoreGui.instance.m_rootPanel.activeSelf)
+            if (StoreGui.instance == null || !StorePanel.IsOpen())
                 return;
 
             repairPanel.SetActive(traderRepair.Value);
@@ -82,8 +82,6 @@ namespace TradersExtended
                     Player.m_localPlayer.GetInventory().RemoveItem(storeGui.m_coinPrefab.m_itemData.m_shared.m_name, Math.Abs(traderRepairCost.Value));
 
                 repairItemDoneEffects?.Create(Player.m_localPlayer.transform.position, Quaternion.identity);
-
-                TraderCoins.UpdateTraderCoins(Math.Abs(traderRepairCost.Value));
 
                 storeGui.m_sellEffects.Create(storeGui.transform.position, Quaternion.identity);
                 

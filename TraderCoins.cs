@@ -1,5 +1,6 @@
 ﻿using HarmonyLib;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -52,7 +53,7 @@ namespace TradersExtended
                     int newAmount = Mathf.Clamp(current + traderCoinsIncreaseAmount.Value, traderCoinsMinimumAmount.Value, traderCoinsMaximumAmount.Value);
                     zdo.Set(s_traderCoins, newAmount);
                     zdo.Set(s_traderCoinsReplenished, __instance.GetCurrentDay());
-                    LogInfo($"{zdo} coins updated {current} -> {newAmount}");
+                    LogInfo($"{ZNetScene.instance.GetPrefab(zdo.GetPrefab())?.name} coins updated {current} -> {newAmount}");
                 }
             }
         }
@@ -65,7 +66,7 @@ namespace TradersExtended
                 if (!modEnabled.Value)
                     return;
 
-                if (!__instance.m_rootPanel.activeSelf)
+                if (!StorePanel.IsOpen())
                     return;
 
                 playerCoins.SetText(__instance.GetPlayerCoins().ToString());
@@ -98,13 +99,45 @@ namespace TradersExtended
             public static void Postfix() => isCalled = false;
         }
 
-        [HarmonyPatch(typeof(Trader), nameof(Trader.OnBought))]
-        public static class StoreGui_OnBought_TraderCoinsUpdate
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.RemoveItem), new Type[] { typeof(string), typeof(int), typeof(int), typeof(bool) })]
+        public static class Inventory_RemoveItem_TraderCoinsUpdate
         {
-            public static void Postfix(Trader.TradeItem item)
+            public static void Postfix(Inventory __instance, string name, int amount)
             {
-                if (StoreGui_BuySelectedItem_TraderCoinsUpdate.isCalled)
-                    UpdateTraderCoins(item.m_price);
+                if (!modEnabled.Value)
+                    return;
+
+                if (name != CoinsPatches.itemDropNameCoins || amount == 0)
+                    return;
+
+                if (!StorePanel.IsOpen())
+                    return;
+
+                if (Player.m_localPlayer == null || Player.m_localPlayer.GetInventory() != __instance)
+                    return;
+
+                UpdateTraderCoins(amount);
+            }
+        }
+
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new Type[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(long), typeof(string), typeof(bool) })]
+        public static class Inventory_AddItem_TraderCoinsUpdate
+        {
+            public static void Postfix(Inventory __instance, string name, int stack)
+            {
+                if (!modEnabled.Value)
+                    return;
+
+                if (name != CoinsPatches.itemNameCoins || stack == 0)
+                    return;
+
+                if (!StorePanel.IsOpen())
+                    return;
+
+                if (Player.m_localPlayer == null || Player.m_localPlayer.GetInventory() != __instance)
+                    return;
+
+                UpdateTraderCoins(-stack);
             }
         }
 
@@ -123,10 +156,10 @@ namespace TradersExtended
 
         public static bool CanSell(int price)
         {
-            return price <= GetTraderCoins();
+            return !traderUseCoins.Value || price <= GetTraderCoins();
         }
 
-        public static void UpdateTraderCoins(int amount = 0)
+        public static void UpdateTraderCoins(int amountToAdd = 0)
         {
             if (!traderUseCoins.Value)
                 return;
@@ -137,9 +170,9 @@ namespace TradersExtended
             if (traderNetView == null || !traderNetView.IsValid())
                 return;
 
-            traderNetView.GetZDO().Set(s_traderCoins, GetTraderCoins() + amount);
+            traderNetView.GetZDO().Set(s_traderCoins, Math.Max(GetTraderCoins() + amountToAdd, 0));
 
-            if (StoreGui.instance.m_rootPanel.activeSelf)
+            if (StorePanel.IsOpen())
                 StorePanel.UpdateNames();
         }
 

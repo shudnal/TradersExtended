@@ -68,7 +68,7 @@ namespace TradersExtended
 
         public static bool IsOpen()
         {
-            return amountDialog != null && amountDialog.activeSelf;
+            return amountDialog != null && amountDialog.activeInHierarchy;
         }
 
         public static void Update()
@@ -194,8 +194,6 @@ namespace TradersExtended
 
                     Player.m_localPlayer.GetInventory().RemoveItem(__instance.m_coinPrefab.m_itemData.m_shared.m_name, coins);
                     
-                    TraderCoins.UpdateTraderCoins(coins);
-
                     __instance.m_trader.OnBought(__instance.m_selectedItem);
                     __instance.m_buyEffects.Create(__instance.transform.position, Quaternion.identity);
                     Player.m_localPlayer.ShowPickupMessage(__instance.m_selectedItem.m_prefab.m_itemData, stack);

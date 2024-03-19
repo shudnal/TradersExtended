@@ -36,6 +36,11 @@ namespace TradersExtended
         private static ItemDrop.ItemData selectedItem;
         private static int selectedItemIndex = -1;
 
+        public static bool IsOpen()
+        {
+            return sellPanel != null && sellPanel.gameObject.activeInHierarchy;
+        }
+
         public static void OnSelectedItem(GameObject button)
         {
             int index = FindSelectedRecipe(button);
@@ -111,8 +116,6 @@ namespace TradersExtended
             stackCoins = (int)(stackCoins * TraderCoins.GetPriceFactor(buyPrice: false));
 
             Player.m_localPlayer.GetInventory().AddItem(m_coinPrefab.gameObject.name, stackCoins, m_coinPrefab.m_itemData.m_quality, m_coinPrefab.m_itemData.m_variant, 0L, "");
-
-            TraderCoins.UpdateTraderCoins(-stackCoins);
 
             __instance.m_sellEffects.Create(__instance.transform.position, Quaternion.identity);
             Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, Localization.instance.Localize("$msg_sold", text, stackCoins.ToString()), 0, selectedItem.m_shared.m_icons[0]);
@@ -270,7 +273,7 @@ namespace TradersExtended
         }
 
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Awake))]
-        public static class StoreGui_Awake_Patch
+        public static class StoreGui_Awake_InitializePanel
         {
             private static GuiInputField InitFilterField(Transform parent)
             {
@@ -303,6 +306,7 @@ namespace TradersExtended
                 sellPanel = UnityEngine.Object.Instantiate(__instance.m_rootPanel, __instance.m_rootPanel.transform);
                 sellPanel.transform.localPosition = new Vector3(250, 0, 0);
                 sellPanel.name = "StoreSell";
+                sellPanel.SetActive(true);
 
                 // Expand to fit new filter fields
                 __instance.m_rootPanel.GetComponent<RectTransform>().sizeDelta += new Vector2(0f, positionDelta);
@@ -393,11 +397,7 @@ namespace TradersExtended
                         bool isAdventureModeEnabled = (bool)MethodInvoker.GetHandler(IsAdventureModeEnabledMethod)(null);
                         LogInfo($"EpicLoot found. Adventure mode: {isAdventureModeEnabled}");
                         if (isAdventureModeEnabled)
-                        {
-                            Vector3 storePos = __instance.m_rootPanel.transform.localPosition;
-                            storePos.x -= 100;
-                            __instance.m_rootPanel.transform.localPosition = storePos;
-                        }
+                            __instance.m_rootPanel.transform.localPosition -= new Vector3(traderRepair.Value ? 146f : 100f, 0f, 0f);
                     }
                 }
 
@@ -456,14 +456,11 @@ namespace TradersExtended
                 if (!modEnabled.Value)
                     return;
 
-                if (!traderUseFlexiblePricing.Value)
-                    return;
-
                 float factor = TraderCoins.GetPriceFactor(buyPrice: true);
                 for (int i = __result.Count - 1; i >= 0; i--)
                     if (!String.IsNullOrWhiteSpace(traderFilter.text) && Localization.instance.Localize(__result[i].m_prefab.m_itemData.m_shared.m_name).ToLower().IndexOf(traderFilter.text.ToLower()) == -1)
                         __result.RemoveAt(i);
-                    else
+                    else if (traderUseFlexiblePricing.Value)
                     {
                         __result[i] = JsonUtility.FromJson<Trader.TradeItem>(JsonUtility.ToJson(__result[i]));
                         __result[i].m_price = Math.Max((int)(__result[i].m_price * factor), 1);
@@ -541,10 +538,8 @@ namespace TradersExtended
                 if (!modEnabled.Value)
                     return;
 
-                if (!__instance.m_rootPanel.activeSelf)
+                if (!IsOpen())
                     return;
-
-                sellPanel.SetActive(value: true);
 
                 TraderCoins.UpdateTraderCoinsVisibility();
 
@@ -595,15 +590,14 @@ namespace TradersExtended
                 return true;
             }
 
-            private static void Postfix(StoreGui __instance)
+            private static void Postfix()
             {
                 if (!modEnabled.Value)
                     return;
 
-                if (__instance.m_rootPanel.activeSelf)
+                // In case hiding was stopped
+                if (IsOpen())
                     return;
-
-                sellPanel.SetActive(value: false);
                 
                 AmountDialog.Close();
 
