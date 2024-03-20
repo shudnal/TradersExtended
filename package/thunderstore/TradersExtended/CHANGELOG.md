@@ -1,3 +1,6 @@
+# 1.1.3
+* minor trader coins fix
+
 # 1.1.2
 * minor fixes
 * support for spent and earned EpicLoot coins

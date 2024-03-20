@@ -102,12 +102,19 @@ namespace TradersExtended
         [HarmonyPatch(typeof(Inventory), nameof(Inventory.RemoveItem), new Type[] { typeof(string), typeof(int), typeof(int), typeof(bool) })]
         public static class Inventory_RemoveItem_TraderCoinsUpdate
         {
-            public static void Postfix(Inventory __instance, string name, int amount)
+            public static void Prefix(int amount, ref int __state)
+            {
+                __state = amount;
+            }
+
+            public static void Postfix(Inventory __instance, string name, int amount, int __state)
             {
                 if (!modEnabled.Value)
                     return;
 
-                if (name != CoinsPatches.itemDropNameCoins || amount == 0)
+                int amountSpent = __state - Math.Max(amount, 0);
+
+                if (name != CoinsPatches.itemDropNameCoins || amountSpent == 0)
                     return;
 
                 if (!StorePanel.IsOpen())
@@ -116,16 +123,19 @@ namespace TradersExtended
                 if (Player.m_localPlayer == null || Player.m_localPlayer.GetInventory() != __instance)
                     return;
 
-                UpdateTraderCoins(amount);
+                UpdateTraderCoins(amountSpent);
             }
         }
 
         [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new Type[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(long), typeof(string), typeof(bool) })]
-        public static class Inventory_AddItem_TraderCoinsUpdate
+        public static class Inventory_AddItem_String_TraderCoinsUpdate
         {
-            public static void Postfix(Inventory __instance, string name, int stack)
+            public static void Postfix(Inventory __instance, string name, int stack, ItemDrop.ItemData __result)
             {
                 if (!modEnabled.Value)
+                    return;
+
+                if (__result == null)
                     return;
 
                 if (name != CoinsPatches.itemNameCoins || stack == 0)
