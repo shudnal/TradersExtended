@@ -1,3 +1,8 @@
+# 1.1.4
+* quality multiplier
+* item name position fix
+* another trader coins fix
+
 # 1.1.3
 * minor trader coins fix
 

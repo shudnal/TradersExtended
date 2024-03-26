@@ -73,7 +73,7 @@ namespace TradersExtended
             if (item == null)
                 Player.m_localPlayer.Message(MessageHud.MessageType.Center, Player.m_localPlayer.GetPlayerName() + " $msg_doesnotneedrepair");
             else if (storeGui.GetPlayerCoins() < Math.Abs(traderRepairCost.Value))
-                Player.m_localPlayer.Message(MessageHud.MessageType.Center, "$msg_missingrequirement: $item_coins");
+                Player.m_localPlayer.Message(MessageHud.MessageType.Center, "$msg_outof $item_coins");
             else
             {
                 item.m_durability = item.GetMaxDurability();

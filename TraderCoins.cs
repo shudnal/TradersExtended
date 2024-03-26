@@ -107,14 +107,12 @@ namespace TradersExtended
                 __state = amount;
             }
 
-            public static void Postfix(Inventory __instance, string name, int amount, int __state)
+            public static void Postfix(Inventory __instance, string name, int __state)
             {
                 if (!modEnabled.Value)
                     return;
 
-                int amountSpent = __state - Math.Max(amount, 0);
-
-                if (name != CoinsPatches.itemDropNameCoins || amountSpent == 0)
+                if (name != CoinsPatches.itemDropNameCoins || __state == 0)
                     return;
 
                 if (!StorePanel.IsOpen())
@@ -123,7 +121,7 @@ namespace TradersExtended
                 if (Player.m_localPlayer == null || Player.m_localPlayer.GetInventory() != __instance)
                     return;
 
-                UpdateTraderCoins(amountSpent);
+                UpdateTraderCoins(__state);
             }
         }
 

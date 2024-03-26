@@ -97,28 +97,15 @@ namespace TradersExtended
 
             selectedItemIndex = GetSelectedItemIndex();
 
-            KeyValuePair<int, int> stackPrice = tempItemsPrice[selectedItem.m_shared.m_name].First();
-            string text;
-            int stackCoins = stackPrice.Value;
+            GetSellItemPriceStack(selectedItem, out int itemPrice, out int itemStack);
 
-            if (stackPrice.Key == 1)
-            {
-                stackCoins *= selectedItem.m_stack;
-                Player.m_localPlayer.GetInventory().RemoveItem(selectedItem);
-                text = (selectedItem.m_stack <= 1) ? selectedItem.m_shared.m_name : (selectedItem.m_stack + "x" + selectedItem.m_shared.m_name);
-            }
-            else
-            {
-                Player.m_localPlayer.GetInventory().RemoveItem(selectedItem, stackPrice.Key);
-                text = $"{stackPrice.Key}x{selectedItem.m_shared.m_name}";
-            }
-
-            stackCoins = (int)(stackCoins * TraderCoins.GetPriceFactor(buyPrice: false));
-
-            Player.m_localPlayer.GetInventory().AddItem(m_coinPrefab.gameObject.name, stackCoins, m_coinPrefab.m_itemData.m_quality, m_coinPrefab.m_itemData.m_variant, 0L, "");
+            Player.m_localPlayer.GetInventory().RemoveItem(selectedItem, itemStack);
+            Player.m_localPlayer.GetInventory().AddItem(m_coinPrefab.gameObject.name, itemPrice, m_coinPrefab.m_itemData.m_quality, m_coinPrefab.m_itemData.m_variant, 0L, "");
+            
+            string text = itemStack <= 1 ? selectedItem.m_shared.m_name : $"{selectedItem.m_stack}x{selectedItem.m_shared.m_name}";
 
             __instance.m_sellEffects.Create(__instance.transform.position, Quaternion.identity);
-            Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, Localization.instance.Localize("$msg_sold", text, stackCoins.ToString()), 0, selectedItem.m_shared.m_icons[0]);
+            Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, Localization.instance.Localize("$msg_sold", text, itemPrice.ToString()), 0, selectedItem.m_shared.m_icons[0]);
             __instance.m_trader.OnSold();
             Gogan.LogEvent("Game", "SoldItem", text, 0L);
 
@@ -198,9 +185,8 @@ namespace TradersExtended
                 element.SetActive(value: true);
                 (element.transform as RectTransform).anchoredPosition = new Vector2(0f, (float)i * (0f - __instance.m_itemSpacing));
 
-                int itemPrice = Math.Max((int)(ItemPrice(tradeItem) * TraderCoins.GetPriceFactor(buyPrice: false)), 1);
-                int itemStack = ItemStack(tradeItem);
-                
+                GetSellItemPriceStack(tradeItem, out int itemPrice, out int itemStack);
+
                 bool canSell = TraderCoins.CanSell(itemPrice);
 
                 Image component = element.transform.Find("icon").GetComponent<Image>();
@@ -209,8 +195,11 @@ namespace TradersExtended
 
                 string text = Localization.instance.Localize(tradeItem.m_shared.m_name);
 
+                if (qualityMultiplier.Value >= 0f && tradeItem.m_quality > 1)
+                    text += $" <color=#add8e6ff>({tradeItem.m_quality})</color>";
+
                 if (itemStack > 1)
-                    text = text + " x" + ItemStack(tradeItem);
+                    text += " x" + ItemStack(tradeItem);
 
                 TMP_Text component2 = element.transform.Find("name").GetComponent<TMP_Text>();
                 component2.SetText(text);
@@ -234,6 +223,12 @@ namespace TradersExtended
             SelectItem(Mathf.Min(tempItems.Count - 1, selectedItemIndex), center: false);
         }
 
+        private static void GetSellItemPriceStack(ItemDrop.ItemData tradeItem, out int itemPrice, out int itemStack)
+        {
+            itemPrice = Math.Max((int)(ItemPrice(tradeItem) * TraderCoins.GetPriceFactor(buyPrice: false)), 1);
+            itemStack = ItemStack(tradeItem);
+        }
+
         public static void UpdateSellButton()
         {
             sellButton.interactable = selectedItem != null;
@@ -244,17 +239,19 @@ namespace TradersExtended
             if (tradeItem == null)
                 return 0;
 
+            int price = 0;
             try
             {
                 KeyValuePair<int, int> stackPrice = tempItemsPrice[tradeItem.m_shared.m_name].First();
-                return (stackPrice.Key == 1) ? stackPrice.Value * tradeItem.m_stack : stackPrice.Value;
+                price = (stackPrice.Key == 1) ? stackPrice.Value * tradeItem.m_stack : stackPrice.Value;
+                price += Math.Max((int)(qualityMultiplier.Value * price * (tradeItem.m_quality - 1)), 0);
             }
             catch (Exception ex)
             {
                 logger.LogWarning($"Cannot find item {tradeItem.m_shared.m_name} price: {ex}");
             }
 
-            return 0;
+            return price;
         }
 
         private static int ItemStack(ItemDrop.ItemData tradeItem)
@@ -298,7 +295,8 @@ namespace TradersExtended
             [HarmonyPriority(Priority.First)]
             static void Postfix(StoreGui __instance)
             {
-                if (!modEnabled.Value) return;
+                if (!modEnabled.Value)
+                    return;
 
                 FillConfigLists();
 
@@ -334,6 +332,10 @@ namespace TradersExtended
                 TraderCoins.playerCoins = sellPanel.transform.Find("coins/coins").GetComponent<TMP_Text>();
                 TraderCoins.traderCoins = __instance.m_coinText;
                 TraderCoins.traderCoinsPanel = __instance.m_rootPanel.transform.Find("coins").gameObject;
+
+                // Fix name position
+                __instance.m_listElement.transform.Find("name").localPosition -= new Vector3(16f, 0f, 0f);
+                listElement.transform.Find("name").localPosition -= new Vector3(16f, 0f, 0f);
 
                 // Prepare new sell button
                 Transform sellPanelTransform = sellPanel.transform.Find("BuyButton");
