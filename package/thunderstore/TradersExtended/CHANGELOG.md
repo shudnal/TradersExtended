@@ -1,3 +1,6 @@
+# 1.1.5
+* patch 0.217.46
+
 # 1.1.4
 * quality multiplier
 * item name position fix

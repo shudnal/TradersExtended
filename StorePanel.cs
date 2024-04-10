@@ -6,7 +6,7 @@ using TMPro;
 using UnityEngine.UI;
 using UnityEngine;
 using static TradersExtended.TradersExtended;
-using Fishlabs;
+using GUIFramework;
 
 namespace TradersExtended
 {
@@ -332,10 +332,6 @@ namespace TradersExtended
                 TraderCoins.playerCoins = sellPanel.transform.Find("coins/coins").GetComponent<TMP_Text>();
                 TraderCoins.traderCoins = __instance.m_coinText;
                 TraderCoins.traderCoinsPanel = __instance.m_rootPanel.transform.Find("coins").gameObject;
-
-                // Fix name position
-                __instance.m_listElement.transform.Find("name").localPosition -= new Vector3(16f, 0f, 0f);
-                listElement.transform.Find("name").localPosition -= new Vector3(16f, 0f, 0f);
 
                 // Prepare new sell button
                 Transform sellPanelTransform = sellPanel.transform.Find("BuyButton");
