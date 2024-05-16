@@ -140,5 +140,12 @@ Create new config file next to dll or in BepInEx\Config\ folder to add items.
 * The mod should be compatible with mods adding more traders with unique names (until they use vanilla store UI)
 * The mod should be compatible with mods adding more items to store (until its patches are noninvasive)
 
+## Configurating
+The best way to handle configs is [Configuration Manager](https://thunderstore.io/c/valheim/p/shudnal/ConfigurationManager/).
+
+Or [Official BepInEx Configuration Manager](https://valheim.thunderstore.io/package/Azumatt/Official_BepInEx_ConfigurationManager/).
+
+For JSON editing [https://jsoneditoronline.org/](https://jsoneditoronline.org/).
+
 ## Mirrors
 [Nexus](https://www.nexusmods.com/valheim/mods/2509)
