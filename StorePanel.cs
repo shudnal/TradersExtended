@@ -172,6 +172,14 @@ namespace TradersExtended
                     tempItems.RemoveAt(i);
                 else if (filterSellList && Localization.instance.Localize(tradeItem.m_shared.m_name).ToLower().IndexOf(playerFilter.text.ToLower()) == -1)
                     tempItems.RemoveAt(i);
+                else if (hideEquippedAndHotbarItems.Value && tradeItem.m_equipped) // Ignore currently equipped item
+                    tempItems.RemoveAt(i);
+                else if (hideEquippedAndHotbarItems.Value && tradeItem.m_gridPos.y == 0 && tradeItem.IsEquipable()) // Ignore equippable item from first row (hotbar)
+                    tempItems.RemoveAt(i);
+                else if (hideEquippedAndHotbarItems.Value && tradeItem.m_gridPos.y > Player.m_localPlayer.GetInventory().GetHeight()) // Ignore every additional (hidden) inventory row
+                    tempItems.RemoveAt(i);
+                else if (AzuExtendedPlayerInventory.API.GetQuickSlotsItems().Contains(tradeItem))
+                    tempItems.RemoveAt(i);
             }
 
             float b = tempItems.Count * __instance.m_itemSpacing;

@@ -15,12 +15,13 @@ namespace TradersExtended
 {
     [BepInPlugin(pluginID, pluginName, pluginVersion)]
     [BepInDependency("randyknapp.mods.epicloot", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("Azumatt.AzuExtendedPlayerInventory", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInIncompatibility("randyknapp.mods.auga")]
     public class TradersExtended : BaseUnityPlugin
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.1.6";
+        private const string pluginVersion = "1.1.7";
 
         private Harmony harmony;
 
@@ -58,6 +59,7 @@ namespace TradersExtended
         public static ConfigEntry<string> tradersCustomPrefabs;
         public static ConfigEntry<bool> disableVanillaItems;
         public static ConfigEntry<float> qualityMultiplier;
+        public static ConfigEntry<bool> hideEquippedAndHotbarItems;
 
         public static readonly Dictionary<string, List<TradeableItem>> tradeableItems = new Dictionary<string, List<TradeableItem>>();
         public static readonly Dictionary<string, List<TradeableItem>> sellableItems = new Dictionary<string, List<TradeableItem>>();
@@ -105,6 +107,8 @@ namespace TradersExtended
             configsJSON.ValueChanged += new Action(LoadConfigs);
 
             epicLootPlugin = GetComponent("EpicLoot");
+
+            Game.isModded = true;
         }
 
         public void Update()
@@ -155,6 +159,7 @@ namespace TradersExtended
             tradersCustomPrefabs = config("Misc", "Custom traders prefab names", defaultValue: "", "List of custom prefab names of Trader added by mods to control coins. Prefab name, case sensitive, comma separated");
             disableVanillaItems = config("Misc", "Disable vanilla items", defaultValue: false, "Disable vanilla items on traders. Custom traders could or could not work depending on their implementation.");
             qualityMultiplier = config("Misc", "Quality multiplier", defaultValue: 0.0f, "Quality multiplier for price. Each level of additional quality level adds that percent of price.");
+            hideEquippedAndHotbarItems = config("Misc", "Hide equipped and hotbar items", defaultValue: true, "Equippable items from first row of inventory and all items currently equipped will not be shown at the sell list.");
 
             InitCommands();
         }

@@ -50,6 +50,10 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>F:\Steam\steamapps\common\Valheim\valheim_Data\Managed\publicized_assemblies\assembly_valheim_publicized.dll</HintPath>
     </Reference>
+    <Reference Include="AzuExtendedPlayerInventoryAPI, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>Libs\AzuExtendedPlayerInventoryAPI.dll</HintPath>
+    </Reference>
     <Reference Include="BepInEx, Version=5.4.21.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>F:\Steam\steamapps\common\Valheim\BepInEx\core\BepInEx.dll</HintPath>
@@ -98,6 +102,9 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="Libs\AzuExtendedPlayerInventoryAPI.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
     <Content Include="Libs\Newtonsoft.Json.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
@@ -121,6 +128,7 @@
     <PostBuildEvent>xcopy "$(TargetDir)\$(TargetFileName)" "$(ProjectDir)package\thunderstore\$(SolutionName)\$(SolutionName)\" /q /y /i
 xcopy "$(TargetDir)\ServerSync.dll" "$(ProjectDir)package\thunderstore\$(SolutionName)\$(SolutionName)\" /q /y /i
 xcopy "$(TargetDir)\Newtonsoft.Json.dll" "$(ProjectDir)package\thunderstore\$(SolutionName)\$(SolutionName)\" /q /y /i
+xcopy "$(TargetDir)\AzuExtendedPlayerInventoryAPI.dll" "$(ProjectDir)package\thunderstore\$(SolutionName)\$(SolutionName)\" /q /y /i
 
 if $(ConfigurationName) == Debug (powershell Compress-Archive -Path '$(ProjectDir)\package\thunderstore\$(SolutionName)\*' -DestinationPath '$(ProjectDir)\package\thunderstore\$(SolutionName).zip' -Force)</PostBuildEvent>
   </PropertyGroup>

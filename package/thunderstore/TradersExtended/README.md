@@ -1,15 +1,7 @@
 # Traders Extended
 ![logo](https://staticdelivery.nexusmods.com/mods/3667/images/headers/2509_1710675587.jpg)
 
-Trader specific buy and sell lists extended. Store UI extended. Sellable items listed next to tradeable with option to sell exact item.
-
-# Description
-
-Yet another trader mod.
-
-Less bloated then BetterTrader if your needs are smaller than complete economics simulating.
-
-A bit more functional than another "simple" trader mods.
+Trader specific buy and sell items lists. Store UI with sell list, filter and repair button. Gamepad support. Trader use coins. Markups and discounts.
 
 ## Features
 * extended store UI with item to sell list
@@ -83,11 +75,17 @@ Config file names for example:
 
 Configs are JSON files containing array of objects with different formats for buy and sell lists.
 
-Configs use game object prefab name. Current list of items [here](https://valheim-modding.github.io/Jotunn/data/objects/item-list.html)
+Configs use game object prefab name. Prefab name is case sensitive. Current list of items [here](https://valheim-modding.github.io/Jotunn/data/objects/item-list.html)
 
 For example "Simple cap red" sold by Hildir will be "HelmetHat5". Wrongly set prefab names will be ignored.
 
 Configs use Boss Keys to filter tradeable item list (https://valheim.fandom.com/wiki/Global_Keys).
+
+You can use console command 
+
+```tradersextended save```
+
+It will generate ObjectDB.list.json file next to mod's dll with all the items currently in your game.
 
 ### Tradeable(Buy) list example
 * I want to be able to buy a Dragon egg for 500 coins after I had killed Moder
