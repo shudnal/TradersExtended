@@ -1,5 +1,6 @@
 # 1.1.7
 * items from hotbar and equipped armor will not appear in sell list
+* 
 
 # 1.1.6
 * Ashlands

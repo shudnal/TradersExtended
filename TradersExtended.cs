@@ -82,6 +82,7 @@ namespace TradersExtended
             public int stack = 1;
             public int price = 1;
             public string requiredGlobalKey = "";
+            public string notRequiredGlobalKey = "";
         }
 
         public enum ItemsListType

@@ -120,6 +120,9 @@ namespace TradersExtended
             if (!string.IsNullOrEmpty(item.requiredGlobalKey) && !ZoneSystem.instance.GetGlobalKey(item.requiredGlobalKey))
                 return;
 
+            if (!string.IsNullOrEmpty(item.notRequiredGlobalKey) && ZoneSystem.instance.GetGlobalKey(item.notRequiredGlobalKey))
+                return;
+
             GameObject prefab = ObjectDB.instance.GetItemPrefab(item.prefab);
             if (prefab == null)
                 return;
@@ -454,7 +457,7 @@ namespace TradersExtended
         }
 
         [HarmonyPatch(typeof(Trader), nameof(Trader.GetAvailableItems))]
-        public static class Trader_GetAvailableItems_
+        public static class Trader_GetAvailableItems_FilterAndFlexiblePrices
         {
             [HarmonyPriority(Priority.Last)]
             public static void Postfix(List<Trader.TradeItem> __result)
@@ -509,6 +512,9 @@ namespace TradersExtended
         {
             itemDrop = null;
             if (!string.IsNullOrEmpty(item.requiredGlobalKey) && !ZoneSystem.instance.GetGlobalKey(item.requiredGlobalKey))
+                return false;
+
+            if (!string.IsNullOrEmpty(item.notRequiredGlobalKey) && ZoneSystem.instance.GetGlobalKey(item.notRequiredGlobalKey))
                 return false;
 
             GameObject itemPrefab = ObjectDB.instance.GetItemPrefab(item.prefab);
