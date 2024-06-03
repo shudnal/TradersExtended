@@ -62,6 +62,11 @@ namespace TradersExtended
         public static ConfigEntry<bool> hideEquippedAndHotbarItems;
         public static ConfigEntry<bool> addCommonValuableItemsToSellList;
 
+        public static ConfigEntry<bool> enableBuyBack;
+        public static ConfigEntry<Color> colorBuybackNormal;
+        public static ConfigEntry<Color> colorBuybackHighlighted;
+        public static ConfigEntry<Color> colorBuybackText;
+
         public static readonly Dictionary<string, List<TradeableItem>> tradeableItems = new Dictionary<string, List<TradeableItem>>();
         public static readonly Dictionary<string, List<TradeableItem>> sellableItems = new Dictionary<string, List<TradeableItem>>();
 
@@ -160,6 +165,11 @@ namespace TradersExtended
             qualityMultiplier = config("Misc", "Quality multiplier", defaultValue: 0.0f, "Quality multiplier for price. Each level of additional quality level adds that percent of price.");
             hideEquippedAndHotbarItems = config("Misc", "Hide equipped and hotbar items", defaultValue: true, "Equippable items from first row of inventory and all items currently equipped will not be shown at the sell list.");
             addCommonValuableItemsToSellList = config("Misc", "Add common valuable items to sell list", defaultValue: true, "Add common valuable items to all traders sell list.");
+
+            enableBuyBack = config("Trader buyback", "Enable buyback for last sold item", defaultValue: true, "First item to buy will be the last item you have recently sold.");
+            colorBuybackNormal = config("Trader buyback", "Background color", defaultValue: new Color(0f, 0.42f, 0.42f), "Color of buyback item background");
+            colorBuybackHighlighted = config("Trader buyback", "Highlighted color", defaultValue: new Color(0.25f, 0.62f, 0.62f), "Color of highlighted buyback item");
+            colorBuybackText = config("Trader buyback", "Font color", defaultValue: new Color(1f, 0.81f, 0f), "Color of buyback item text ");
 
             InitCommands();
         }

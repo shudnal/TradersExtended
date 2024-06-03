@@ -18,6 +18,8 @@ Trader specific buy and sell items lists. Store UI with sell list, filter and re
 * you can filter both buy and sell list by item name
 * you can customize coins weight and exact stack size
 * EpicLoot support (colored icons and coins spent in Adventure mode)
+* you can buyback last sold item
+* items from hotbar, quickslots and equipped armor will not appear in sell list
 
 ## Check for discovery
 

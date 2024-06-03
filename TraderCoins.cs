@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
+using static TradersExtended.TraderCoins;
 using static TradersExtended.TradersExtended;
 
 namespace TradersExtended
@@ -97,46 +98,6 @@ namespace TradersExtended
             }
         }
 
-        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.BuySelectedItem))]
-        public static class StoreGui_BuySelectedItem_TraderCoinsUpdate
-        {
-            public static bool isCalled = false;
-
-            public static bool Prefix(StoreGui __instance, ref Tuple<int, int> __state)
-            {
-                if (!modEnabled.Value)
-                    return true;
-
-                if (AmountDialog.IsOpen())
-                    return false;
-
-                isCalled = true;
-
-                if (__instance.m_selectedItem != null)
-                {
-                    TradeableItem.GetStackQualityFromStack(__instance.m_selectedItem.m_stack, out int stack, out int quality);
-                    if (quality != 0)
-                    {
-                        __state = Tuple.Create(__instance.m_selectedItem.m_stack, __instance.m_selectedItem.m_prefab.m_itemData.m_quality);
-                        __instance.m_selectedItem.m_stack = stack;
-                        __instance.m_selectedItem.m_prefab.m_itemData.m_quality = quality;
-                    }
-                }
-
-                return true;
-            }
-
-            public static void Postfix(StoreGui __instance, Tuple<int, int> __state)
-            {
-                isCalled = false;
-                if (__state != null)
-                {
-                    __instance.m_selectedItem.m_stack = __state.Item1;
-                    __instance.m_selectedItem.m_prefab.m_itemData.m_quality = __state.Item2;
-                }
-            }
-        }
-
         [HarmonyPatch(typeof(Inventory), nameof(Inventory.RemoveItem), new Type[] { typeof(string), typeof(int), typeof(int), typeof(bool) })]
         public static class Inventory_RemoveItem_TraderCoinsUpdate
         {
@@ -184,19 +145,6 @@ namespace TradersExtended
                     return;
 
                 UpdateTraderCoins(-stack);
-            }
-        }
-
-        [HarmonyPatch(typeof(Character), nameof(Character.ShowPickupMessage))]
-        public static class Character_ShowPickupMessage_FixIncorrectStackMessage
-        {
-            private static void Prefix(ItemDrop.ItemData item, ref int amount)
-            {
-                if (!modEnabled.Value)
-                    return;
-
-                if (StoreGui.instance != null && StoreGui_BuySelectedItem_TraderCoinsUpdate.isCalled && StoreGui.instance.m_selectedItem != null && item == StoreGui.instance.m_selectedItem.m_prefab?.m_itemData)
-                    amount = StoreGui.instance.m_selectedItem.m_stack;
             }
         }
 
