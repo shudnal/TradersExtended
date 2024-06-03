@@ -18,8 +18,8 @@ Trader specific buy and sell items lists. Store UI with sell list, filter and re
 * you can filter both buy and sell list by item name
 * you can customize coins weight and exact stack size
 * EpicLoot support (colored icons and coins spent in Adventure mode)
-* you can buyback last sold item
-* items from hotbar, quickslots and equipped armor will not appear in sell list
+* you can buyback last sold item (item will be available until relog)
+* items from hotbar, quick slots and equipped armor will not appear in sell list
 
 ## Check for discovery
 
@@ -27,13 +27,23 @@ Traders will wait for item discovery before it appears in the store.
 
 To exclude some item from that rule you can set its prefab name in "Undiscovered items list to sell" config.
 
-Vanilla items will always be there (if global key met).
+Vanilla items will be available (if its addition is not disabled and global key met).
+
+If you disable automatic addition of vanilla item in trader list you have to manually add items in buy list and add its prefab names to "Undiscovered items list to sell" config.
 
 ## Repair
 
 Trader will repair your items for 2 coins each. You can set cost in coins.
 
 Set trader name or its prefab name in the appropriate list for it to repair set type of items. Weapons or Armor.
+
+## Buyback
+
+If you have recently sold an item to a Trader it will be available to buy back at first position on the buy list and will be color highlighted.
+
+Colors are configurable.
+
+Only last sold item is available to buy back.
 
 ## Trader use coins
 
@@ -44,6 +54,8 @@ Every morning (at set replenishment rate) every trader will be given settable am
 If trader have more coins than minimum amount - sell price will be raised and buy price reduced. If trader have less coins than minimum - sell price will be reduced and buy prices increased.
 
 If you want custom traders to operate coins you must set its prefab name in "Custom traders prefab names" config. Case sensitive, comma separated.
+
+If you're host(or use server devcommands) and admin you can use console command ```settradercoins [Trader name] [amount]``` to manually set trader coins.
 
 Defaults:
 * trader have 2000 coins
@@ -79,19 +91,25 @@ Configs are JSON files containing array of objects with different formats for bu
 
 Configs use game object prefab name. Prefab name is case sensitive. Current list of items [here](https://valheim-modding.github.io/Jotunn/data/objects/item-list.html)
 
-For example "Simple cap red" sold by Hildir will be "HelmetHat5". Wrongly set prefab names will be ignored.
+For example "Simple cap red" sold by Hildir will be "HelmetHat5". Incorrect prefab names will be safely ignored.
 
 Configs use Boss Keys to filter tradeable item list (https://valheim.fandom.com/wiki/Global_Keys).
 
-You can use console command 
+You can use console command ```tradersextended save``` It will generate ObjectDB.list.json file next to mod's dll with all the items currently in your game.
 
-```tradersextended save```
-
-It will generate ObjectDB.list.json file next to mod's dll with all the items currently in your game.
+### Tradeable item model
+* prefab - string - Prefab name of item. Column Item from [item list](https://valheim-modding.github.io/Jotunn/data/objects/item-list.html)
+* stack - integer - how many items in stack. If set to 0 then item will be ignored.
+* price - integer - price for stack. If set to 0 then item will be ignored.
+* quality - integer - quality of item. If set to 0 then for buy list quality will be default and for sell list quality will not be checked
+* requiredGlobalKey - string - if set, then global key should be set for item to appear
+* notRequiredGlobalKey - string - if set, then global key should NOT be set for item to appear
 
 ### Tradeable(Buy) list example
 * I want to be able to buy a Dragon egg for 500 coins after I had killed Moder
 * I want to be able to buy a Boar meat for 10 coins
+* I want to be able to buy an Ancient Seed until Elder is killed
+* I want to be able to buy max quality Cultivator after I had Elder killed
 ```
 [
   {
@@ -104,27 +122,50 @@ It will generate ObjectDB.list.json file next to mod's dll with all the items cu
     "prefab": "RawMeat", 
     "stack": 1,
     "price": 10,
-    "requiredGlobalKey": ""
   },  
+  {
+    "prefab": "AncientSeed", 
+    "stack": 1,
+    "price": 1000,
+    "notRequiredGlobalKey": "defeated_gdking"
+  },
+  {
+    "prefab": "Cultivator", 
+    "stack": 1,
+    "price": 500,
+    "requiredGlobalKey": "defeated_gdking",
+    "quality": 4,
+  },
 ]
 ```
 
 ### Sellable(Sell) list example
 I want to be able to sell a Fishing rod for 200 coins
 I want to be able to sell a stack of Wood for 25 coins after Elder was killed
+I want to be able to sell Perch with 50 gold each but also sell x5 Perch of quality 4 for more.
 ```
 [
   {
     "prefab": "FishingRod", 
     "stack": 1,
     "price": 200,
-    "requiredGlobalKey": ""
   },
   {
     "prefab": "Wood", 
     "stack": 50,
     "price": 25,
     "requiredGlobalKey": "defeated_gdking"
+  },
+  {
+    "prefab": "Fish1",
+    "stack": 1,
+    "price": 50,
+  },
+  {
+    "prefab": "Fish1",
+    "stack": 5,
+    "price": 500,
+    "quality": 4,
   },
 ]
 ```

@@ -538,6 +538,8 @@ namespace TradersExtended
                 LogInfo($"StoreGui panel patched");
 
                 SetupConfigWatcher();
+
+                buybackItem = null;
             }
         }
 

@@ -166,10 +166,10 @@ namespace TradersExtended
             hideEquippedAndHotbarItems = config("Misc", "Hide equipped and hotbar items", defaultValue: true, "Equippable items from first row of inventory and all items currently equipped will not be shown at the sell list.");
             addCommonValuableItemsToSellList = config("Misc", "Add common valuable items to sell list", defaultValue: true, "Add common valuable items to all traders sell list.");
 
-            enableBuyBack = config("Trader buyback", "Enable buyback for last sold item", defaultValue: true, "First item to buy will be the last item you have recently sold.");
-            colorBuybackNormal = config("Trader buyback", "Background color", defaultValue: new Color(0f, 0.42f, 0.42f), "Color of buyback item background");
-            colorBuybackHighlighted = config("Trader buyback", "Highlighted color", defaultValue: new Color(0.25f, 0.62f, 0.62f), "Color of highlighted buyback item");
-            colorBuybackText = config("Trader buyback", "Font color", defaultValue: new Color(1f, 0.81f, 0f), "Color of buyback item text ");
+            enableBuyBack = config("Trader buyback", "Enable buyback for last item sold", defaultValue: true, "First item to buy will be the last item you have recently sold.");
+            colorBuybackNormal = config("Trader buyback", "Item background color", defaultValue: new Color(0f, 0.42f, 0.42f), "Color of buyback item background.");
+            colorBuybackHighlighted = config("Trader buyback", "Item highlighted color", defaultValue: new Color(0.25f, 0.62f, 0.62f), "Color of highlighted buyback item.");
+            colorBuybackText = config("Trader buyback", "Item font color", defaultValue: new Color(1f, 0.81f, 0f), "Color of buyback item name.");
 
             InitCommands();
         }
