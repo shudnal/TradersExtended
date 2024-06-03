@@ -17,11 +17,11 @@ namespace TradersExtended
     [BepInDependency("randyknapp.mods.epicloot", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("Azumatt.AzuExtendedPlayerInventory", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInIncompatibility("randyknapp.mods.auga")]
-    public class TradersExtended : BaseUnityPlugin
+    public partial class TradersExtended : BaseUnityPlugin
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.1.7";
+        private const string pluginVersion = "1.2.0";
 
         private Harmony harmony;
 
@@ -60,6 +60,7 @@ namespace TradersExtended
         public static ConfigEntry<bool> disableVanillaItems;
         public static ConfigEntry<float> qualityMultiplier;
         public static ConfigEntry<bool> hideEquippedAndHotbarItems;
+        public static ConfigEntry<bool> addCommonValuableItemsToSellList;
 
         public static readonly Dictionary<string, List<TradeableItem>> tradeableItems = new Dictionary<string, List<TradeableItem>>();
         public static readonly Dictionary<string, List<TradeableItem>> sellableItems = new Dictionary<string, List<TradeableItem>>();
@@ -75,23 +76,13 @@ namespace TradersExtended
         public static HashSet<string> _tradersToRepairWeapons = new HashSet<string>();
         public static HashSet<string> _tradersToRepairArmor = new HashSet<string>();
 
-        [Serializable]
-        public class TradeableItem
-        {
-            public string prefab;
-            public int stack = 1;
-            public int price = 1;
-            public string requiredGlobalKey = "";
-            public string notRequiredGlobalKey = "";
-        }
-
         public enum ItemsListType
         {
             Buy,
             Sell
         }
 
-        internal void Awake()
+        void Awake()
         {
             harmony = Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly(), pluginID);
 
@@ -112,9 +103,16 @@ namespace TradersExtended
             Game.isModded = true;
         }
 
-        public void Update()
+        void Update()
         {
             AmountDialog.Update();
+        }
+
+        void OnDestroy()
+        {
+            Config.Save();
+            instance = null;
+            harmony?.UnpatchSelf();
         }
 
         public static void LogInfo(object data)
@@ -161,6 +159,7 @@ namespace TradersExtended
             disableVanillaItems = config("Misc", "Disable vanilla items", defaultValue: false, "Disable vanilla items on traders. Custom traders could or could not work depending on their implementation.");
             qualityMultiplier = config("Misc", "Quality multiplier", defaultValue: 0.0f, "Quality multiplier for price. Each level of additional quality level adds that percent of price.");
             hideEquippedAndHotbarItems = config("Misc", "Hide equipped and hotbar items", defaultValue: true, "Equippable items from first row of inventory and all items currently equipped will not be shown at the sell list.");
+            addCommonValuableItemsToSellList = config("Misc", "Add common valuable items to sell list", defaultValue: true, "Add common valuable items to all traders sell list.");
 
             InitCommands();
         }
@@ -176,13 +175,6 @@ namespace TradersExtended
         }
 
         ConfigEntry<T> config<T>(string group, string name, T defaultValue, string description, bool synchronizedSetting = true) => config(group, name, defaultValue, new ConfigDescription(description), synchronizedSetting);
-
-        private void OnDestroy()
-        {
-            Config.Save();
-            instance = null;
-            harmony?.UnpatchSelf();
-        }
 
         public static void InitCommands()
         {
@@ -201,6 +193,16 @@ namespace TradersExtended
                     args.Context.AddString("Syntax: tradersextended [action]");
                 }
             }, isCheat: false, isNetwork: false, onlyServer: false, isSecret: false, allowInDevBuild: false, () => new List<string>() { "save  -  Save every item from ObjectDB into file ObjectDB.list.json next to dll" }, alwaysRefreshTabOptions: true, remoteCommand: false);
+            
+            new Terminal.ConsoleCommand("settradercoins", "[trader] [amount]", delegate (Terminal.ConsoleEventArgs args)
+            {
+                if (args.Length <= 1)
+                    return false;
+
+                TraderCoins.SetTraderCoins(args[1].GetStableHashCode(), args.TryParameterInt(2, traderCoinsMinimumAmount.Value));
+
+                return true;
+            }, isCheat: true, isNetwork: false, onlyServer: true, isSecret: false, allowInDevBuild: false, () => TraderCoins.GetTraderPrefabs(), alwaysRefreshTabOptions: true, remoteCommand: false, onlyAdmin: true);
         }
 
         public static void SaveFromObjectDB(Terminal context)
@@ -393,7 +395,7 @@ namespace TradersExtended
 
             int itemsCount = sellableItems[listKey].Count;
 
-            List<TradeableItem> items = valuableItems.Concat(sellableItems[listKey]).GroupBy(item => item.prefab).Select(g => g.Last()).ToList();
+            List<TradeableItem> items = valuableItems.Concat(sellableItems[listKey]).ToList();
 
             LogInfo($"Loaded {items.Count - itemsCount} common valuable items from ObjectDB");
 
@@ -417,7 +419,8 @@ namespace TradersExtended
                     LoadSellableItems(configJSON.Value, trader);
             }
 
-            AddCommonValuableItems();
+            if (addCommonValuableItemsToSellList.Value)
+                AddCommonValuableItems();
         }
 
         private static void LoadTradeableItems(string JSON, string trader)
@@ -439,7 +442,7 @@ namespace TradersExtended
                 return;
             }
 
-            List<TradeableItem> items = tradeableItems[listKey].Concat(itemsFromFile).GroupBy(item => item.prefab).Select(g => g.First()).ToList();
+            List<TradeableItem> items = tradeableItems[listKey].Concat(itemsFromFile).ToList();
 
             LogInfo($"Loaded {itemsFromFile.Count} tradeable item from {listKey}");
 
@@ -465,7 +468,7 @@ namespace TradersExtended
                 return;
             }
 
-            List<TradeableItem> items = sellableItems[listKey].Concat(itemsFromFile).GroupBy(item => item.prefab).Select(g => g.First()).ToList();
+            List<TradeableItem> items = sellableItems[listKey].Concat(itemsFromFile).ToList();
 
             LogInfo($"Loaded {itemsFromFile.Count} sellable item from {listKey}");
 

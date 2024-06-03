@@ -155,7 +155,7 @@ namespace TradersExtended
             if (selectedItem == null)
                 return;
 
-            if (selectedItem.m_stack != 1)
+            if (TradeableItem.GetStackFromStack(selectedItem.m_stack) != 1)
                 return;
 
             if (selectedItem.m_prefab.m_itemData.m_shared.m_maxStackSize == 1)

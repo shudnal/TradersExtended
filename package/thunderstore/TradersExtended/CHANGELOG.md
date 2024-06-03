@@ -1,6 +1,9 @@
-# 1.1.7
+# 1.2.0
 * items from hotbar and equipped armor will not appear in sell list
 * option to set global key that should not be set for item to be in the list
+* configurable item quality
+* multiple stacks size
+* new console command to set trader coins
 
 # 1.1.6
 * Ashlands

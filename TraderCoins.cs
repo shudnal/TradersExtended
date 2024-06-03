@@ -1,6 +1,5 @@
 ﻿using HarmonyLib;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using TMPro;
@@ -21,6 +20,29 @@ namespace TradersExtended
         private static readonly int s_traderCoins = "traderCoins".GetStableHashCode();
         private static readonly int s_traderCoinsReplenished = "traderCoinsReplenished".GetStableHashCode();
 
+        public static List<string> GetTraderPrefabs()
+        {
+            return new List<string>()
+            {
+                "Haldor",
+                "Hildir"
+            }.Concat(tradersCustomPrefabs.Value.Split(',').Select(p => p.Trim()).Where(p => !string.IsNullOrWhiteSpace(p))).ToList();
+        }
+
+        public static void SetTraderCoins(int prefab, int newAmount)
+        {
+            if (!EnvMan.instance || !ZNetScene.instance || ZDOMan.instance == null)
+                return;
+
+            foreach (ZDO zdo in ZDOMan.instance.m_objectsByID.Values.Where(zdo => prefab == zdo.GetPrefab()))
+            {
+                int current = zdo.GetInt(s_traderCoins);
+                zdo.Set(s_traderCoins, newAmount);
+                zdo.Set(s_traderCoinsReplenished, EnvMan.instance.GetCurrentDay());
+                LogInfo($"{ZNetScene.instance.GetPrefab(zdo.GetPrefab())?.name} coins updated {current} -> {newAmount}");
+            }
+        }
+
         [HarmonyPatch(typeof(EnvMan), nameof(EnvMan.OnMorning))]
         public static class EnvMan_OnMorning_TraderCoinsUpdate
         {
@@ -29,16 +51,12 @@ namespace TradersExtended
                 if (!traderUseCoins.Value)
                     return;
 
-                MessageHud.instance?.ShowMessage(MessageHud.MessageType.TopLeft, "$store_topic. $msg_added: $item_coins");
+                MessageHud.instance?.ShowMessage(MessageHud.MessageType.TopLeft, "$store_topic: $msg_added $item_coins");
 
                 if (!ZNet.instance.IsServer())
                     return;
 
-                HashSet<int> traderPrefabs = new HashSet<int>(tradersCustomPrefabs.Value.Split(',').Select(p => p.Trim()).Where(p => !string.IsNullOrWhiteSpace(p)).Select(selector => selector.GetStableHashCode()).ToList())
-                {
-                    "Haldor".GetStableHashCode(),
-                    "Hildir".GetStableHashCode()
-                };
+                HashSet<int> traderPrefabs = new HashSet<int>(GetTraderPrefabs().Select(selector => selector.GetStableHashCode()));
 
                 foreach (ZDO zdo in ZDOMan.instance.m_objectsByID.Values.Where(zdo => traderPrefabs.Contains(zdo.GetPrefab())))
                 {
@@ -84,7 +102,7 @@ namespace TradersExtended
         {
             public static bool isCalled = false;
 
-            public static bool Prefix()
+            public static bool Prefix(StoreGui __instance, ref Tuple<int, int> __state)
             {
                 if (!modEnabled.Value)
                     return true;
@@ -93,10 +111,30 @@ namespace TradersExtended
                     return false;
 
                 isCalled = true;
+
+                if (__instance.m_selectedItem != null)
+                {
+                    TradeableItem.GetStackQualityFromStack(__instance.m_selectedItem.m_stack, out int stack, out int quality);
+                    if (quality != 0)
+                    {
+                        __state = Tuple.Create(__instance.m_selectedItem.m_stack, __instance.m_selectedItem.m_prefab.m_itemData.m_quality);
+                        __instance.m_selectedItem.m_stack = stack;
+                        __instance.m_selectedItem.m_prefab.m_itemData.m_quality = quality;
+                    }
+                }
+
                 return true;
             }
 
-            public static void Postfix() => isCalled = false;
+            public static void Postfix(StoreGui __instance, Tuple<int, int> __state)
+            {
+                isCalled = false;
+                if (__state != null)
+                {
+                    __instance.m_selectedItem.m_stack = __state.Item1;
+                    __instance.m_selectedItem.m_prefab.m_itemData.m_quality = __state.Item2;
+                }
+            }
         }
 
         [HarmonyPatch(typeof(Inventory), nameof(Inventory.RemoveItem), new Type[] { typeof(string), typeof(int), typeof(int), typeof(bool) })]

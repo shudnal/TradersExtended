@@ -97,6 +97,7 @@
     <Compile Include="CoinsPatches.cs" />
     <Compile Include="StorePanel.cs" />
     <Compile Include="RepairPanel.cs" />
+    <Compile Include="TradeableItem.cs" />
     <Compile Include="TraderCoins.cs" />
     <Compile Include="TradersExtended.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
