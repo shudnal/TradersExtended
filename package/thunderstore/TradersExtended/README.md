@@ -140,9 +140,9 @@ You can use console command ```tradersextended save``` It will generate ObjectDB
 ```
 
 ### Sellable(Sell) list example
-I want to be able to sell a Fishing rod for 200 coins
-I want to be able to sell a stack of Wood for 25 coins after Elder was killed
-I want to be able to sell Perch with 50 gold each but also sell x5 Perch of quality 4 for more.
+* I want to be able to sell a Fishing rod for 200 coins
+* I want to be able to sell a stack of Wood for 25 coins after Elder was killed
+* I want to be able to sell Perch with 50 gold each but also sell x5 Perch of quality 4 for more.
 ```
 [
   {
