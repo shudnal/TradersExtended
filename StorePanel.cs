@@ -405,6 +405,14 @@ namespace TradersExtended
             return result;
         }
 
+        public static void SetStoreGuiAbsolutePosition()
+        {
+            if (fixedStoreGuiPosition.Value == Vector2.zero || StoreGui.instance == null || StoreGui.instance.m_rootPanel == null)
+                return;
+
+            StoreGui.instance.m_rootPanel.transform.localPosition = fixedStoreGuiPosition.Value;
+        }
+
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Awake))]
         public static class StoreGui_Awake_InitializePanel
         {
@@ -628,6 +636,8 @@ namespace TradersExtended
 
                 playerFilter.SetTextWithoutNotify("");
                 traderFilter.SetTextWithoutNotify("");
+
+                SetStoreGuiAbsolutePosition();
             }
         }
 

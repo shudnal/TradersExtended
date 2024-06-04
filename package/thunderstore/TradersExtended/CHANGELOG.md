@@ -1,3 +1,6 @@
+# 1.2.1
+* option to set fixed position for Store GUI
+
 # 1.2.0
 * items from hotbar, quick slots and equipped armor will not appear in sell list
 * option to set global key that should not be set for item to be in the list
@@ -6,6 +9,9 @@
 * new console command to set trader coins
 * option to buyback last item sold
 * option to disable automatic addition of valuable items to sell list
+
+<details>
+<summary><b>Changelog History</b> (<i>click to expand</i>)</summary>
 
 # 1.1.6
 * Ashlands
@@ -38,9 +44,6 @@
 * configurable weight and stack size of coins
 * vanilla items could be disabled
 * lots of refinements and improvements
-
-<details>
-<summary><b>Changelog History</b> (<i>click to expand</i>)</summary>
 
 # 1.0.21
 * refinements for shared config files reading
