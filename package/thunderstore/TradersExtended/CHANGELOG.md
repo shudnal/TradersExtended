@@ -1,3 +1,6 @@
+# 1.2.2
+* fix for dedicated server
+
 # 1.2.1
 * option to set fixed position for Store GUI
 
