@@ -1,3 +1,6 @@
+# 1.2.4
+* fix for common sell list
+
 # 1.2.3
 * fix for common valuable items prices
 

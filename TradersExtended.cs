@@ -21,7 +21,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.2.3";
+        private const string pluginVersion = "1.2.4";
 
         private Harmony harmony;
 
@@ -168,6 +168,7 @@ namespace TradersExtended
             addCommonValuableItemsToSellList = config("Misc", "Add common valuable items to sell list", defaultValue: true, "Add common valuable items to all traders sell list.");
             fixedStoreGuiPosition = config("Misc", "Fixed position for Store GUI", defaultValue: Vector2.zero, "If set then Store GUI will take that absolute position.");
 
+            addCommonValuableItemsToSellList.SettingChanged += (sender, args) => LoadConfigs();
             fixedStoreGuiPosition.SettingChanged += (sender, args) => StorePanel.SetStoreGuiAbsolutePosition();
 
             enableBuyBack = config("Trader buyback", "Enable buyback for last item sold", defaultValue: true, "First item to buy will be the last item you have recently sold.");
@@ -461,9 +462,16 @@ namespace TradersExtended
 
         private static void AddCommonValuableItems()
         {
+            if (!ObjectDB.instance)
+                return;
+
             string listKey = CommonListKey(ItemsListType.Sell);
 
-            sellableItems[listKey] = new List<TradeableItem>();
+            if (!sellableItems.ContainsKey(listKey))
+                sellableItems[listKey] = new List<TradeableItem>();
+
+            int itemsCount = sellableItems[listKey].Count;
+
             foreach (GameObject prefab in ObjectDB.instance.m_items)
             {
                 if (!prefab.TryGetComponent(out ItemDrop itemDrop))
@@ -482,7 +490,7 @@ namespace TradersExtended
                 });
             }
 
-            LogInfo($"Loaded {sellableItems[listKey].Count} common valuable items from ObjectDB");
+            LogInfo($"Loaded {sellableItems[listKey].Count - itemsCount} common valuable items from ObjectDB");
         }
 
         private static bool IsItemInSellList(string prefabName)
