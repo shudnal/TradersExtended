@@ -21,7 +21,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.2.2";
+        private const string pluginVersion = "1.2.3";
 
         private Harmony harmony;
 
@@ -386,36 +386,6 @@ namespace TradersExtended
             configsJSON.AssignLocalValue(localConfig);
         }
 
-        private static void AddCommonValuableItems()
-        {
-            List<TradeableItem> valuableItems = new List<TradeableItem>();
-            foreach (GameObject prefab in ObjectDB.instance.m_items)
-            {
-                if (!prefab.TryGetComponent(out ItemDrop itemDrop))
-                    continue;
-
-                if (itemDrop.m_itemData.m_shared.m_value > 0)
-                    valuableItems.Add(new TradeableItem()
-                    {
-                        prefab = prefab.name,
-                        price = itemDrop.m_itemData.m_shared.m_value
-                    });
-            }
-
-            string listKey = CommonListKey(ItemsListType.Sell);
-
-            if (!sellableItems.ContainsKey(listKey))
-                sellableItems.Add(listKey, new List<TradeableItem>());
-
-            int itemsCount = sellableItems[listKey].Count;
-
-            List<TradeableItem> items = valuableItems.Concat(sellableItems[listKey]).ToList();
-
-            LogInfo($"Loaded {items.Count - itemsCount} common valuable items from ObjectDB");
-
-            sellableItems[listKey] = items;
-        }
-
         private static void LoadConfigs()
         {
             tradeableItems.Clear();
@@ -487,6 +457,41 @@ namespace TradersExtended
             LogInfo($"Loaded {itemsFromFile.Count} sellable item from {listKey}");
 
             sellableItems[listKey] = items;
+        }
+
+        private static void AddCommonValuableItems()
+        {
+            string listKey = CommonListKey(ItemsListType.Sell);
+
+            sellableItems[listKey] = new List<TradeableItem>();
+            foreach (GameObject prefab in ObjectDB.instance.m_items)
+            {
+                if (!prefab.TryGetComponent(out ItemDrop itemDrop))
+                    continue;
+
+                if (itemDrop.m_itemData.m_shared.m_value <= 0)
+                    continue;
+
+                if (IsItemInSellList(prefab.name))
+                    continue;
+
+                sellableItems[listKey].Add(new TradeableItem()
+                {
+                    prefab = prefab.name,
+                    price = itemDrop.m_itemData.m_shared.m_value
+                });
+            }
+
+            LogInfo($"Loaded {sellableItems[listKey].Count} common valuable items from ObjectDB");
+        }
+
+        private static bool IsItemInSellList(string prefabName)
+        {
+            foreach (string listKey in sellableItems.Keys)
+                if (sellableItems[listKey].Any(item => item.prefab == prefabName))
+                    return true;
+            
+            return false;
         }
 
         private static string TraderName(string name)

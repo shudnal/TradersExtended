@@ -1,3 +1,6 @@
+# 1.2.3
+* fix for common valuable items prices
+
 # 1.2.2
 * fix for dedicated server
 
