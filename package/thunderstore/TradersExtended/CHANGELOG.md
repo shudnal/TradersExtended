@@ -1,3 +1,6 @@
+# 1.2.5
+* more solid trader coins replenishment in the morning
+
 # 1.2.4
 * fix for common sell list
 

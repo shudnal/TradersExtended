@@ -44,12 +44,20 @@ namespace TradersExtended
             }
         }
 
-        [HarmonyPatch(typeof(EnvMan), nameof(EnvMan.OnMorning))]
-        public static class EnvMan_OnMorning_TraderCoinsUpdate
+        [HarmonyPatch(typeof(EnvMan), nameof(EnvMan.UpdateTriggers))]
+        public static class EnvMan_UpdateTriggers_TraderCoinsUpdate
         {
-            private static void Postfix(EnvMan __instance)
+            private static bool IsMorning(float oldDayFraction, float newDayFraction)
+            {
+                return oldDayFraction > 0.2f && oldDayFraction < 0.25f && newDayFraction > 0.25f && newDayFraction < 0.3f;
+            }
+
+            private static void Postfix(EnvMan __instance, float oldDayFraction, float newDayFraction)
             {
                 if (!traderUseCoins.Value)
+                    return;
+
+                if (!IsMorning(oldDayFraction, newDayFraction))
                     return;
 
                 MessageHud.instance?.ShowMessage(MessageHud.MessageType.TopLeft, "$store_topic: $msg_added $item_coins");
