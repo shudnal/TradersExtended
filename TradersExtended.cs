@@ -21,7 +21,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.2.5";
+        private const string pluginVersion = "1.2.6";
 
         private Harmony harmony;
 
@@ -193,7 +193,7 @@ namespace TradersExtended
 
         public static void InitCommands()
         {
-            new Terminal.ConsoleCommand("tradersextended", "[action]", delegate (Terminal.ConsoleEventArgs args)
+            new Terminal.ConsoleCommand("tradersextended", "save - Save full item list into config folder, itemlist - Save filtered item list into config folder", delegate (Terminal.ConsoleEventArgs args)
             {
                 if (args.Length >= 2)
                 {
@@ -202,12 +202,19 @@ namespace TradersExtended
                     {
                         SaveFromObjectDB(args.Context);
                     }
+                    else if (action == "itemlist")
+                    {
+                        ExportItemListFromObjectDB(args.Context);
+                    }
                 }
                 else
                 {
-                    args.Context.AddString("Syntax: tradersextended [action]");
+                    args.Context.AddString("Actions: save - Save full item list into config folder, itemlist - Save filtered item list into config folder");
                 }
-            }, isCheat: false, isNetwork: false, onlyServer: false, isSecret: false, allowInDevBuild: false, () => new List<string>() { "save  -  Save every item from ObjectDB into file ObjectDB.list.json next to dll" }, alwaysRefreshTabOptions: true, remoteCommand: false);
+            }, isCheat: false, isNetwork: false, onlyServer: false, isSecret: false, allowInDevBuild: false, () => new List<string>() {
+                "save",
+                "itemlist"
+            }, alwaysRefreshTabOptions: true, remoteCommand: false);
             
             new Terminal.ConsoleCommand("settradercoins", "[trader] [amount]", delegate (Terminal.ConsoleEventArgs args)
             {
@@ -225,7 +232,7 @@ namespace TradersExtended
             List<TradeableItem> allItems = new List<TradeableItem>();
             foreach (GameObject prefab in ObjectDB.instance.m_items)
             {
-                if (!prefab.TryGetComponent<ItemDrop>(out ItemDrop itemDrop))
+                if (!prefab.TryGetComponent(out ItemDrop itemDrop))
                     continue;
 
                 allItems.Add(new TradeableItem()
@@ -237,11 +244,114 @@ namespace TradersExtended
 
             string JSON = JsonConvert.SerializeObject(allItems, Formatting.Indented);
 
-            string filename = Path.Combine(pluginDirectory.FullName, "ObjectDB.list.json");
+            Directory.CreateDirectory(Path.Combine(configDirectory.FullName, pluginID));
+            string filename = Path.Combine(configDirectory.FullName, pluginID, "ObjectDB.list.json");
 
             File.WriteAllText(filename, JSON);
 
-            context.AddString($"Saved {allItems.Count} items to {filename}");
+            context.AddString($"Saved {allItems.Count} items to \"\\config\\{pluginID}\\ObjectDB.list.json\"");
+        }
+
+        public class ItemToExport
+        {
+            public string prfb;
+            //public string token;
+            public string name;
+            //public string description;
+            //public string type;
+            public int sell = 0;
+            public int buy = 0;
+            public int stack = 0;
+            public string from = "";
+        }
+
+        public static void ExportItemListFromObjectDB(Terminal context)
+        {
+            List<ItemToExport> allItems = new List<ItemToExport>();
+            HashSet<string> itemNames = new HashSet<string>();
+
+            var enemies = Resources.FindObjectsOfTypeAll<Humanoid>().Where(human => human.TryGetComponent<BaseAI>(out _));
+            foreach (Humanoid humanoid in enemies)
+                foreach (GameObject item in humanoid.m_defaultItems)
+                {
+                    if (!item.TryGetComponent(out ItemDrop itemDrop))
+                        continue;
+
+                    if (itemNames.Contains(item.name))
+                        continue;
+
+                    itemNames.Add(item.name);
+                }
+
+            Trader[] traders = Resources.FindObjectsOfTypeAll<Trader>();
+            foreach (Trader trader in traders)
+                foreach (Trader.TradeItem item in trader.m_items)
+                {
+                    if (itemNames.Contains(item.m_prefab.name))
+                        continue;
+
+                    itemNames.Add(item.m_prefab.name);
+
+                    if (item.m_prefab.m_itemData.m_shared.m_name.IsNullOrWhiteSpace() || item.m_prefab.m_itemData.m_shared.m_description == null ||
+                        item.m_prefab.m_itemData.m_shared.m_itemType == ItemDrop.ItemData.ItemType.None || item.m_prefab.m_itemData.m_shared.m_itemType == ItemDrop.ItemData.ItemType.Customization)
+                        continue;
+
+                    allItems.Add(new ItemToExport()
+                    {
+                        prfb = item.m_prefab.name,
+                        //token = item.m_prefab.m_itemData.m_shared.m_name,
+                        name = Localization.instance.Localize(item.m_prefab.m_itemData.m_shared.m_name),
+                        //description = Localization.instance.Localize(item.m_prefab.m_itemData.m_shared.m_description),
+                        //type = item.m_prefab.m_itemData.m_shared.m_itemType.ToString(),
+                        sell= Math.Max(item.m_prefab.m_itemData.m_shared.m_value, 0),
+                        buy= item.m_price,
+                        stack = item.m_stack,
+                        from = Localization.instance.Localize(trader.m_name)
+                    });
+                }
+
+            foreach (GameObject prefab in ObjectDB.instance.m_items)
+            {
+                if (!prefab.TryGetComponent(out ItemDrop itemDrop))
+                    continue;
+
+                if (itemNames.Contains(prefab.name))
+                    continue;
+
+                itemNames.Add(prefab.name);
+
+                if (!itemDrop.m_itemData.m_shared.m_name.StartsWith("$"))
+                    continue;
+
+                if (itemDrop.m_itemData.m_shared.m_description == null ||
+                    itemDrop.m_itemData.m_shared.m_itemType == ItemDrop.ItemData.ItemType.None || 
+                    itemDrop.m_itemData.m_shared.m_itemType == ItemDrop.ItemData.ItemType.Customization)
+                    continue;
+
+                allItems.Add(new ItemToExport()
+                {
+                    prfb = itemDrop.name,
+                    //token = itemDrop.m_itemData.m_shared.m_name,
+                    name = Localization.instance.Localize(itemDrop.m_itemData.m_shared.m_name),
+                    //description = Localization.instance.Localize(itemDrop.m_itemData.m_shared.m_description),
+                    //type = itemDrop.m_itemData.m_shared.m_itemType.ToString(),
+                    sell = Math.Max(itemDrop.m_itemData.m_shared.m_value, 0),
+                });
+            }
+
+            JsonSerializerSettings settings = new JsonSerializerSettings();
+            settings.Formatting = Formatting.None;
+            settings.NullValueHandling = NullValueHandling.Ignore;
+            settings.DefaultValueHandling = DefaultValueHandling.Ignore;
+
+            string JSON = JsonConvert.SerializeObject(allItems.OrderBy(item => item.prfb).OrderByDescending(item => item.from), settings);
+
+            Directory.CreateDirectory(Path.Combine(configDirectory.FullName, pluginID));
+            string filename = Path.Combine(configDirectory.FullName, pluginID, "ItemList.json");
+
+            File.WriteAllText(filename, JSON);
+
+            context.AddString($"Saved {allItems.Count} items to \"\\config\\{pluginID}\\ItemList.json\"");
         }
 
         public static void FillConfigLists()

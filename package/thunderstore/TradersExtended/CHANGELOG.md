@@ -1,3 +1,6 @@
+# 1.2.6
+* new command "tradersextended itemlist" for new Google Sheet JSON Helper
+
 # 1.2.5
 * more solid trader coins replenishment in the morning
 

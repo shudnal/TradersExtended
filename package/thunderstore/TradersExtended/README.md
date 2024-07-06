@@ -95,7 +95,9 @@ For example "Simple cap red" sold by Hildir will be "HelmetHat5". Incorrect pref
 
 Configs use Boss Keys to filter tradeable item list (https://valheim.fandom.com/wiki/Global_Keys).
 
-You can use console command ```tradersextended save``` It will generate ObjectDB.list.json file next to mod's dll with all the items currently in your game.
+You can use console command ```tradersextended save``` It will generate ObjectDB.list.json file in **\BepInEx\config\shudnal.TradersExtended\** folder with all the items currently in your game.
+
+For easy formatting you can use [Google Sheets JSON Helper](https://docs.google.com/spreadsheets/d/1VgGlERaRb2rDB6ULdoWM39Sh0L_X1sR4dJE1CgRDsYI). It was created for this mod to help editing configs.
 
 ### Tradeable item model
 * prefab - string - Prefab name of item. Column Item from [item list](https://valheim-modding.github.io/Jotunn/data/objects/item-list.html)
