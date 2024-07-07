@@ -151,10 +151,10 @@ namespace TradersExtended
             if (item.price == 0 || item.stack == 0)
                 return;
 
-            if (!string.IsNullOrEmpty(item.requiredGlobalKey) && !ZoneSystem.instance.GetGlobalKey(item.requiredGlobalKey))
+            if (!string.IsNullOrEmpty(item.requiredGlobalKey) && item.requiredGlobalKey.Split(',').Select(s => s.Trim()).Any(s => !ZoneSystem.instance.GetGlobalKey(s)))
                 return;
 
-            if (!string.IsNullOrEmpty(item.notRequiredGlobalKey) && ZoneSystem.instance.GetGlobalKey(item.notRequiredGlobalKey))
+            if (!string.IsNullOrEmpty(item.notRequiredGlobalKey) && item.notRequiredGlobalKey.Split(',').Select(s => s.Trim()).Any(s => ZoneSystem.instance.GetGlobalKey(s)))
                 return;
 
             if (!TryGetPriceKey(item, out string key))

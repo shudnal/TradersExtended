@@ -1,5 +1,6 @@
 # 1.2.6
 * new command "tradersextended itemlist" for new Google Sheet JSON Helper
+* requiredGlobalKey and notRequiredGlobalKey can be set as comma separated value
 
 # 1.2.5
 * more solid trader coins replenishment in the morning
