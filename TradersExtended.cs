@@ -255,10 +255,7 @@ namespace TradersExtended
         public class ItemToExport
         {
             public string prfb;
-            //public string token;
             public string name;
-            //public string description;
-            //public string type;
             public int sell = 0;
             public int buy = 0;
             public int stack = 0;
@@ -299,10 +296,7 @@ namespace TradersExtended
                     allItems.Add(new ItemToExport()
                     {
                         prfb = item.m_prefab.name,
-                        //token = item.m_prefab.m_itemData.m_shared.m_name,
                         name = Localization.instance.Localize(item.m_prefab.m_itemData.m_shared.m_name),
-                        //description = Localization.instance.Localize(item.m_prefab.m_itemData.m_shared.m_description),
-                        //type = item.m_prefab.m_itemData.m_shared.m_itemType.ToString(),
                         sell= Math.Max(item.m_prefab.m_itemData.m_shared.m_value, 0),
                         buy= item.m_price,
                         stack = item.m_stack,
@@ -331,18 +325,17 @@ namespace TradersExtended
                 allItems.Add(new ItemToExport()
                 {
                     prfb = itemDrop.name,
-                    //token = itemDrop.m_itemData.m_shared.m_name,
                     name = Localization.instance.Localize(itemDrop.m_itemData.m_shared.m_name),
-                    //description = Localization.instance.Localize(itemDrop.m_itemData.m_shared.m_description),
-                    //type = itemDrop.m_itemData.m_shared.m_itemType.ToString(),
                     sell = Math.Max(itemDrop.m_itemData.m_shared.m_value, 0),
                 });
             }
 
-            JsonSerializerSettings settings = new JsonSerializerSettings();
-            settings.Formatting = Formatting.None;
-            settings.NullValueHandling = NullValueHandling.Ignore;
-            settings.DefaultValueHandling = DefaultValueHandling.Ignore;
+            JsonSerializerSettings settings = new JsonSerializerSettings
+            {
+                Formatting = Formatting.None,
+                NullValueHandling = NullValueHandling.Ignore,
+                DefaultValueHandling = DefaultValueHandling.Ignore
+            };
 
             string JSON = JsonConvert.SerializeObject(allItems.OrderBy(item => item.prfb).OrderByDescending(item => item.from), settings);
 

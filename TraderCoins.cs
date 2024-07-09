@@ -189,7 +189,7 @@ namespace TradersExtended
             traderCoinsPanel.SetActive(traderUseCoins.Value);
         }
 
-        private static int GetTraderCoins()
+        public static int GetTraderCoins()
         {
             if (traderNetView == null)
                 traderNetView = StoreGui.instance.m_trader?.GetComponent<ZNetView>();
