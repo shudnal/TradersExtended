@@ -95,15 +95,23 @@ For example "Simple cap red" sold by Hildir will be "HelmetHat5". Incorrect pref
 
 Configs use Boss Keys to filter tradeable item list (https://valheim.fandom.com/wiki/Global_Keys).
 
-You can use console command ```tradersextended save``` It will generate ObjectDB.list.json file next to mod's dll with all the items currently in your game.
+You can use console command ```tradersextended save``` It will generate ObjectDB.list.json file in **\BepInEx\config\shudnal.TradersExtended\** folder with all the items currently in your game.
+
+### Google Sheets JSON Helper
+
+For easy configs formatting you can use [Google Sheets JSON Helper](https://docs.google.com/spreadsheets/d/1VgGlERaRb2rDB6ULdoWM39Sh0L_X1sR4dJE1CgRDsYI). It was created for this mod to help editing configs.
+
+More info in the spreadsheet itself.
+
+Credits for the idea, first implementation, testing and documentation for @MeowingInsanely!
 
 ### Tradeable item model
 * prefab - string - Prefab name of item. Column Item from [item list](https://valheim-modding.github.io/Jotunn/data/objects/item-list.html)
 * stack - integer - how many items in stack. If set to 0 then item will be ignored.
 * price - integer - price for stack. If set to 0 then item will be ignored.
 * quality - integer - quality of item. If set to 0 then for buy list quality will be default and for sell list quality will not be checked
-* requiredGlobalKey - string - if set, then global key should be set for item to appear
-* notRequiredGlobalKey - string - if set, then global key should NOT be set for item to appear
+* requiredGlobalKey - string, comma-separated - if set, then all global keys from the list should be set for item to appear. In other words if any global key is not set then item will not be available.
+* notRequiredGlobalKey - string, comma-separated - if set, then all global keys from the list should NOT be set for item to appear. In other words if any global key is set then item will not be available.
 
 ### Tradeable(Buy) list example
 * I want to be able to buy a Dragon egg for 500 coins after I had killed Moder
@@ -186,7 +194,9 @@ The best way to handle configs is [Configuration Manager](https://thunderstore.i
 
 Or [Official BepInEx Configuration Manager](https://valheim.thunderstore.io/package/Azumatt/Official_BepInEx_ConfigurationManager/).
 
-For JSON editing [https://jsoneditoronline.org/](https://jsoneditoronline.org/).
+For raw JSON editing [https://jsoneditoronline.org/](https://jsoneditoronline.org/).
+
+Tool for that mod [Traders Extended - JSON Helper](https://docs.google.com/spreadsheets/d/1VgGlERaRb2rDB6ULdoWM39Sh0L_X1sR4dJE1CgRDsYI).
 
 ## Mirrors
 [Nexus](https://www.nexusmods.com/valheim/mods/2509)
