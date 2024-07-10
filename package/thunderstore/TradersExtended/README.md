@@ -65,10 +65,11 @@ Defaults:
 * normal prices will be at 2000 coins and will gradually change
 
 ## Gamepad support
+* use left gamepad stick to scroll buy list
 * use right gamepad stick to scroll sell list
-* hold Left trigger to scroll sell list using DPad up and down
+* use DPad to operate both lists
 * Use (X) for XBox, (☐) for PS to sell selected item
-* hold Left trigger and press (A) for XBox, (X) for PS to open items amount dialog
+* hold Alternate action and press (A) for XBox, (X) for PS to open items amount dialog
 * use Right Stick click to repair item
 
 ## Config file names
