@@ -1,6 +1,11 @@
-# 1.2.6
-* new command "tradersextended itemlist" for new Google Sheet JSON Helper
+# 1.3.0
+* new Google Sheets JSON Helper for easy JSONs management (link and details in description)
+* new command "tradersextended itemlist" for item list export
 * requiredGlobalKey and notRequiredGlobalKey can be set as comma separated value
+* amount dialog extended and now available for items sell as well
+* if you have no free slots for coins after sell transaction the surplus of coins will be dropped on the ground at traders feet
+* fixed item tooltip issue with gamepad enabled
+* better gamepad support
 
 # 1.2.5
 * more solid trader coins replenishment in the morning

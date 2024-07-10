@@ -21,7 +21,7 @@ namespace TradersExtended
                 Combined
             }
 
-            public const string c_buybackItem = "buybackItem";
+            private const string c_buybackItem = "buybackItem";
 
             public ItemType itemType = ItemType.Single;
             public ItemDrop.ItemData item;
@@ -29,12 +29,24 @@ namespace TradersExtended
             public int price;
             public int amount;
             public int quality;
+            public int pricePerItem;
 
             public ItemToSell Clone()
             {
                 ItemToSell obj = MemberwiseClone() as ItemToSell;
                 obj.item = item.Clone();
                 return obj;
+            }
+
+            public static bool IsBuyBackItem(Trader.TradeItem item)
+            {
+                return item?.m_requiredGlobalKey == c_buybackItem;
+            }
+
+            public static Trader.TradeItem SetBuyBackItem(Trader.TradeItem item)
+            {
+                item.m_requiredGlobalKey = c_buybackItem;
+                return item;
             }
         }
 
@@ -49,6 +61,7 @@ namespace TradersExtended
         private static ScrollRectEnsureVisible itemEnsureVisible;
         private static RectTransform listRoot;
         private static GameObject listElement;
+        private static RectTransform tooltipAnchor;
 
         private static GuiInputField traderFilter;
         private static GuiInputField playerFilter;
@@ -110,7 +123,11 @@ namespace TradersExtended
 
             selectedItem = (index < 0) ? null : tempItems[index];
 
-            AmountDialog.SetSellState(sellDialog: true);
+            if (index >= 0)
+            {
+                AmountDialog.SetSellState(sellDialog: true);
+                StoreGui.instance.SelectItem(-1, center: false);
+            }
         }
 
         public static void SellSelectedItem(StoreGui __instance)
@@ -246,6 +263,10 @@ namespace TradersExtended
         private static void AddToSellList(ItemDrop.ItemData item, int itemStack, int itemPrice, float priceFactor, int quality, ItemToSell.ItemType itemType)
         {
             int price = itemPrice;
+
+            if (itemType == ItemToSell.ItemType.Combined)
+                price *= itemStack;
+
             if (itemType != ItemToSell.ItemType.Stack && qualityMultiplier.Value != 0 && quality == 0 && item.m_quality > 1)
                 price += (int)(qualityMultiplier.Value * price * (item.m_quality - 1));
 
@@ -300,7 +321,8 @@ namespace TradersExtended
                         stack = 1,
                         price = price,
                         amount = itemStack,
-                        quality = quality
+                        quality = quality,
+                        pricePerItem = itemPrice + (qualityMultiplier.Value != 0 && quality == 0 && item.m_quality > 1 ? (int)(qualityMultiplier.Value * itemPrice * (item.m_quality - 1)) : 0)
                     });
                 }
             }
@@ -338,7 +360,7 @@ namespace TradersExtended
                         if (item.m_shared.m_maxStackSize == 1)
                             AddToSellList(item, 1, stackPrices[stack], priceFactor, quality, ItemToSell.ItemType.Single);
                         else
-                            AddToSellList(item, item.m_stack, stackPrices[stack] * item.m_stack, priceFactor, quality, ItemToSell.ItemType.Combined);
+                            AddToSellList(item, item.m_stack, stackPrices[stack], priceFactor, quality, ItemToSell.ItemType.Combined);
                     else
                         AddToSellList(item, stack, stackPrices[stack], priceFactor, quality, ItemToSell.ItemType.Stack);
             }
@@ -375,7 +397,7 @@ namespace TradersExtended
 
                 TMP_Text component2 = element.transform.Find("name").GetComponent<TMP_Text>();
                 component2.SetText(text);
-                element.GetComponent<UITooltip>().Set(tradeItem.item.m_shared.m_name, tradeItem.item.GetTooltip(), __instance.m_tooltipAnchor);
+                element.GetComponent<UITooltip>().Set(tradeItem.item.m_shared.m_name, tradeItem.item.GetTooltip(), tooltipAnchor);
                 TMP_Text component3 = element.transform.Find("coin_bkg").Find("price").GetComponent<TMP_Text>();
                 component3.SetText(tradeItem.price.ToString());
                 if (!canSell)
@@ -402,7 +424,7 @@ namespace TradersExtended
 
         public static bool BuyBackItem(StoreGui store)
         {
-            if (store.m_selectedItem.m_requiredGlobalKey != ItemToSell.c_buybackItem)
+            if (!ItemToSell.IsBuyBackItem(store.m_selectedItem))
                 return false;
 
             bool result;
@@ -491,6 +513,7 @@ namespace TradersExtended
                 listRoot = items.Find("ListRoot").GetComponent<RectTransform>();
                 listElement = items.Find("ItemElement").gameObject;
                 itemEnsureVisible = items.GetComponent<ScrollRectEnsureVisible>();
+                tooltipAnchor = sellPanel.transform.Find("TooltipAnchor").GetComponent<RectTransform>();
 
                 storeName = __instance.m_rootPanel.transform.Find("topic").GetComponent<TMP_Text>();
                 playerName = sellPanel.transform.Find("topic").GetComponent<TMP_Text>();
@@ -565,6 +588,9 @@ namespace TradersExtended
                     }
                 }
 
+                // Move original tooltip anchor to the side
+                __instance.m_tooltipAnchor.anchorMax += new Vector2(1f, 0f);
+
                 LogInfo($"StoreGui panel patched");
 
                 SetupConfigWatcher();
@@ -615,13 +641,12 @@ namespace TradersExtended
                     }
 
                 if (enableBuyBack.Value && buybackItem != null)
-                    __result.Insert(0, new Trader.TradeItem()
+                    __result.Insert(0, ItemToSell.SetBuyBackItem(new Trader.TradeItem()
                     {
                         m_prefab = null,
                         m_stack = 0,
-                        m_price = buybackItem.price,
-                        m_requiredGlobalKey = ItemToSell.c_buybackItem
-                    });
+                        m_price = buybackItem.price
+                    }));
             }
         }
 
@@ -724,7 +749,7 @@ namespace TradersExtended
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.UpdateRecipeGamepadInput))]
         public static class StoreGui_UpdateRecipeGamepadInput_SellListGamepadNavigation
         {
-            private static bool Prefix(StoreGui __instance)
+            private static bool Prefix(StoreGui __instance, List<GameObject> ___m_itemList)
             {
                 if (!modEnabled.Value)
                     return true;
@@ -732,30 +757,66 @@ namespace TradersExtended
                 if (AmountDialog.IsOpen() || Console.IsVisible())
                     return false;
 
-                if (sellItemList.Count == 0)
-                    return true;
-
-                if (ZInput.GetButtonDown("JoyRStickDown") || ZInput.GetButtonDown("JoyDPadDown") && ZInput.GetButton("JoyLTrigger"))
+                if (ZInput.GetButtonDown("JoyButtonA") && ZInput.GetButton("JoyAltKeys"))
                 {
-                    SelectItem(Mathf.Min(sellItemList.Count - 1, GetSelectedItemIndex() + 1), center: true);
-                    return false;
-                }
-
-                if (ZInput.GetButtonDown("JoyRStickUp") || ZInput.GetButtonDown("JoyDPadUp") && ZInput.GetButton("JoyLTrigger"))
-                {
-                    SelectItem(Mathf.Max(0, GetSelectedItemIndex() - 1), center: true);
-                    return false;
-                }
-
-                if (ZInput.GetButtonDown("JoyButtonA") && ZInput.GetButton("JoyLTrigger"))
-                {
-                    AmountDialog.SetSellState(sellDialog: true);
                     AmountDialog.Open();
                     ZInput.ResetButtonStatus("JoyButtonA");
                     return false;
                 }
 
-                return true;
+                if (ZInput.GetButtonDown("JoyDPadDown"))
+                {
+                    if (GetSelectedItemIndex() != -1)
+                        SelectItem(Mathf.Min(sellItemList.Count - 1, GetSelectedItemIndex() + 1), center: true);
+                    else if (__instance.GetSelectedItemIndex() != -1)
+                        __instance.SelectItem(Mathf.Min(___m_itemList.Count - 1, __instance.GetSelectedItemIndex() + 1), center: true);
+                }
+
+                if (ZInput.GetButtonDown("JoyDPadUp"))
+                {
+                    if (GetSelectedItemIndex() != -1)
+                        SelectItem(Mathf.Max(0, GetSelectedItemIndex() - 1), center: true);
+                    else if (__instance.GetSelectedItemIndex() != -1)
+                        __instance.SelectItem(Mathf.Max(0, __instance.GetSelectedItemIndex() - 1), center: true);
+                }
+
+                if (___m_itemList.Count > 0)
+                {
+                    if (ZInput.GetButtonDown("JoyLStickDown"))
+                    {
+                        __instance.SelectItem(Mathf.Min(___m_itemList.Count - 1, __instance.GetSelectedItemIndex() + 1), center: true);
+                    }
+
+                    if (ZInput.GetButtonDown("JoyLStickUp"))
+                    {
+                        __instance.SelectItem(Mathf.Max(0, __instance.GetSelectedItemIndex() - 1), center: true);
+                    }
+
+                    if (ZInput.GetButtonDown("JoyDPadLeft") || ZInput.GetButtonDown("JoyRStickLeft"))
+                    {
+                        __instance.SelectItem(Mathf.Min(___m_itemList.Count - 1, Math.Max(__instance.GetSelectedItemIndex(), 0)), center: true);
+                    }
+                }
+
+                if (sellItemList.Count > 0)
+                {
+                    if (ZInput.GetButtonDown("JoyDPadRight") || ZInput.GetButtonDown("JoyRStickRight"))
+                    {
+                        SelectItem(Mathf.Min(sellItemList.Count - 1, Math.Max(GetSelectedItemIndex(), 0)), center: true);
+                    }
+
+                    if (ZInput.GetButtonDown("JoyRStickDown"))
+                    {
+                        SelectItem(Mathf.Min(sellItemList.Count - 1, GetSelectedItemIndex() + 1), center: true);
+                    }
+
+                    if (ZInput.GetButtonDown("JoyRStickUp"))
+                    {
+                        SelectItem(Mathf.Max(0, GetSelectedItemIndex() - 1), center: true);
+                    }
+                }
+
+                return false;
             }
         }
 
@@ -815,14 +876,21 @@ namespace TradersExtended
                 if (!modEnabled.Value)
                     return;
 
-                if (___m_itemList.Count == 0)
-                    index = -1;
-                else
-                    index = Mathf.Clamp(index, 0, ___m_itemList.Count - 1);
+                if (index >= 0)
+                {
+                    if (___m_itemList.Count == 0)
+                        index = -1;
+                    else
+                        index = Mathf.Clamp(index, 0, ___m_itemList.Count - 1);
+                }
 
                 center = center || index == 0;
 
-                AmountDialog.SetSellState(sellDialog: false);
+                if (index >= 0)
+                {
+                    AmountDialog.SetSellState(sellDialog: false);
+                    SelectItem(-1, center: false);
+                }
             }
         }
 
@@ -848,7 +916,7 @@ namespace TradersExtended
                 {
                     Trader.TradeItem tradeItem = availableItems[i];
 
-                    bool isBuyback = tradeItem.m_requiredGlobalKey == ItemToSell.c_buybackItem;
+                    bool isBuyback = ItemToSell.IsBuyBackItem(tradeItem);
 
                     ItemDrop.ItemData itemData = isBuyback ? buybackItem.item : tradeItem.m_prefab.m_itemData;
                     int price = isBuyback ? buybackItem.price : tradeItem.m_price;
@@ -938,9 +1006,6 @@ namespace TradersExtended
             {
                 if (!modEnabled.Value)
                     return true;
-
-                if (AmountDialog.IsOpen())
-                    return false;
 
                 isCalled = true;
 

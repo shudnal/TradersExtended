@@ -15,9 +15,11 @@ namespace TradersExtended
         private static Slider sliderDialog;
         private static TMP_Text sliderTitle;
         private static TMP_Text sliderAmountText;
+        private static TMP_Text sliderAmountCoinsText;
         private static TMP_Text sliderButtonOk;
         private static Image sliderImage;
         private static string sliderTitleText;
+        private static string sliderButtonText;
         private static StoreGui storeGui;
 
         private const float m_splitNumInputTimeoutSec = 0.5f;
@@ -39,6 +41,45 @@ namespace TradersExtended
             sliderAmountText = win_bkg.Find("amount").GetComponent<TMP_Text>();
             sliderImage = win_bkg.Find("Icon_bkg/Icon").GetComponent<Image>();
             sliderButtonOk = win_bkg.Find("Button_ok/Text").GetComponent<TMP_Text>();
+
+            Transform icon = win_bkg.Find("Icon_bkg");
+
+            GameObject sliderCoinsIcon = UnityEngine.Object.Instantiate(icon.gameObject, win_bkg);
+            sliderCoinsIcon.name = "Coins_bkg";
+            sliderCoinsIcon.transform.SetSiblingIndex(icon.GetSiblingIndex() + 1);
+            Image coinsImage = sliderCoinsIcon.transform.Find("Icon").GetComponent<Image>();
+            coinsImage.sprite = storeGui.m_coinPrefab.m_itemData.GetIcon();
+
+            RectTransform rtCoins = sliderCoinsIcon.GetComponent<RectTransform>();
+            rtCoins.anchorMax += new Vector2(0.15f, 0);
+            rtCoins.anchorMin += new Vector2(0.15f, 0);
+
+            RectTransform rtItem = icon.GetComponent<RectTransform>();
+            rtItem.anchorMax -= new Vector2(0.15f, 0);
+            rtItem.anchorMin -= new Vector2(0.15f, 0);
+
+            GameObject sliderAmountCoins = UnityEngine.Object.Instantiate(sliderAmountText.gameObject, win_bkg);
+            sliderAmountCoins.name = "amount_coins";
+            sliderAmountCoins.transform.SetSiblingIndex(sliderAmountText.transform.GetSiblingIndex() + 1);
+
+            sliderAmountCoinsText = sliderAmountCoins.GetComponent<TMP_Text>();
+            
+            RectTransform rtCoinsAmount = sliderAmountText.GetComponent<RectTransform>();
+            rtCoinsAmount.anchorMax -= new Vector2(0.15f, 0);
+            rtCoinsAmount.anchorMin -= new Vector2(0.15f, 0);
+
+            RectTransform rtItemAmount = sliderAmountCoins.GetComponent<RectTransform>();
+            rtItemAmount.anchorMax += new Vector2(0.15f, 0);
+            rtItemAmount.anchorMin += new Vector2(0.15f, 0);
+
+            GameObject sliderEqual = UnityEngine.Object.Instantiate(sliderTitle.gameObject, win_bkg);
+            sliderEqual.name = "equal";
+            sliderEqual.transform.SetSiblingIndex(sliderTitle.transform.GetSiblingIndex() + 1);
+
+            RectTransform rtEqual = sliderEqual.GetComponent<RectTransform>();
+            rtEqual.anchorMin -= new Vector2(0f, 0.5f);
+
+            sliderEqual.GetComponent<TMP_Text>().SetText("=");
 
             sliderDialog.onValueChanged.AddListener(OnSplitSliderChanged);
             win_bkg.Find("Button_ok").GetComponent<Button>().onClick.AddListener(OnOkClick);
@@ -68,8 +109,6 @@ namespace TradersExtended
             else
             {
                 clickTime = Time.time;
-                if (ZInput.GetButton("JoyButtonA") && !IsOpen())
-                    Open();
             }
         }
 
@@ -96,7 +135,9 @@ namespace TradersExtended
             if (!sliderDialog.gameObject.activeInHierarchy)
                 return;
 
+            // Gamepad compatibility
             sliderTitle.SetText(sliderTitleText);
+            sliderButtonOk.SetText(sliderButtonText);
 
             for (int i = 0; i < 10; i++)
             {
@@ -129,6 +170,30 @@ namespace TradersExtended
                 OnSplitSliderChanged();
             }
 
+            if (ZInput.GetButtonDown("JoyLTrigger") && sliderDialog.value > 10f)
+            {
+                sliderDialog.value -= 10f;
+                OnSplitSliderChanged();
+            }
+
+            if (ZInput.GetButtonDown("JoyRTrigger") && sliderDialog.value < sliderDialog.maxValue)
+            {
+                sliderDialog.value += 10f;
+                OnSplitSliderChanged();
+            }
+
+            if (ZInput.GetButtonDown("JoyLBumper") && sliderDialog.value > 5f)
+            {
+                sliderDialog.value -= 5f;
+                OnSplitSliderChanged();
+            }
+
+            if (ZInput.GetButtonDown("JoyRBumper") && sliderDialog.value < sliderDialog.maxValue)
+            {
+                sliderDialog.value += 5f;
+                OnSplitSliderChanged();
+            }
+
             if (ZInput.GetKeyDown(KeyCode.KeypadEnter) || ZInput.GetKeyDown(KeyCode.Return))
             {
                 BuySelectedItem();
@@ -151,6 +216,7 @@ namespace TradersExtended
             if (amountDialog == null)
                 return;
 
+            LogInfo(isSellDialog);
             if (isSellDialog)
             {
                 StorePanel.ItemToSell selectedItem = StorePanel.selectedItem;
@@ -161,8 +227,7 @@ namespace TradersExtended
                 if (selectedItem.itemType != StorePanel.ItemToSell.ItemType.Combined)
                     return;
 
-                int price = GetSellPrice(selectedItem);
-                if (price == 0)
+                if (selectedItem.pricePerItem == 0)
                     return;
 
                 if (!Player.m_localPlayer.GetInventory().HaveItem(selectedItem.item.m_shared.m_name))
@@ -173,10 +238,10 @@ namespace TradersExtended
                 {
                     int coins = TraderCoins.GetTraderCoins();
 
-                    if (coins < price)
+                    if (coins < selectedItem.pricePerItem)
                         return;
 
-                    maxStack = Mathf.Min(coins / price, maxStack);
+                    maxStack = Mathf.Min(coins / selectedItem.pricePerItem, maxStack);
                 }
 
                 SetDialogAndOpen(selectedItem.item, maxStack);
@@ -188,7 +253,7 @@ namespace TradersExtended
 
                 Trader.TradeItem selectedItem = storeGui.m_selectedItem;
 
-                if (selectedItem == null)
+                if (selectedItem == null || StorePanel.ItemToSell.IsBuyBackItem(selectedItem))
                     return;
 
                 int coins = storeGui.GetPlayerCoins();
@@ -210,7 +275,7 @@ namespace TradersExtended
         {
             sliderTitleText = Localization.instance.Localize(item.m_shared.m_name);
 
-            sliderButtonOk.SetText(Localization.instance.Localize(isSellDialog ? "$store_sell" : "$store_buy"));
+            sliderButtonText = Localization.instance.Localize(isSellDialog ? "$store_sell" : "$store_buy");
 
             sliderDialog.value = 1f;
             sliderDialog.minValue = 1f;
@@ -226,6 +291,7 @@ namespace TradersExtended
         public static void OnSplitSliderChanged(float value = 0f)
         {
             sliderAmountText.SetText(((int)sliderDialog.value).ToString());
+            sliderAmountCoinsText.SetText(GetPrice().ToString());
         }
 
         private static void BuySelectedItem()
@@ -235,7 +301,7 @@ namespace TradersExtended
                 if (TraderCanAffordSelectedItem())
                 {
                     StorePanel.selectedItem.amount = Mathf.CeilToInt(sliderDialog.value);
-                    StorePanel.selectedItem.price = StorePanel.selectedItem.amount * GetSellPrice(StorePanel.selectedItem);
+                    StorePanel.selectedItem.price = GetPrice();
                     StorePanel.SellSelectedItem(storeGui);
                 }
             }
@@ -259,7 +325,7 @@ namespace TradersExtended
             if (StorePanel.selectedItem == null)
                 return false;
 
-            return TraderCoins.CanSell(GetSellPrice(StorePanel.selectedItem) * (int)sliderDialog.value) && Player.m_localPlayer.GetInventory().HaveEmptySlot();
+            return TraderCoins.CanSell(GetPrice());
         }
 
         private static bool CanAffordSelectedItem()
@@ -268,12 +334,17 @@ namespace TradersExtended
                 return false;
 
             int playerCoins = storeGui.GetPlayerCoins();
-            return storeGui.m_selectedItem.m_price * (int)sliderDialog.value <= playerCoins && Player.m_localPlayer.GetInventory().HaveEmptySlot();
+            return GetPrice() <= playerCoins && Player.m_localPlayer.GetInventory().HaveEmptySlot();
         }
 
-        private static int GetSellPrice(StorePanel.ItemToSell itemToSell)
+        private static int GetPricePerItem()
         {
-            return itemToSell.price == 0 ? 0 : itemToSell.amount / itemToSell.price;
+            return isSellDialog ? StorePanel.selectedItem.pricePerItem : storeGui.m_selectedItem.m_price;
+        }
+
+        internal static int GetPrice()
+        {
+            return Mathf.CeilToInt((int)sliderDialog.value * GetPricePerItem() * (isSellDialog ? TraderCoins.GetPriceFactor(buyPrice: false) : 1f));
         }
 
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.OnSelectedItem))]
