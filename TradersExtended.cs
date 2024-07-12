@@ -10,6 +10,7 @@ using System.IO;
 using System;
 using Newtonsoft.Json;
 using System.Linq;
+using System.Collections;
 
 namespace TradersExtended
 {
@@ -21,7 +22,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.3.0";
+        private const string pluginVersion = "1.3.1";
 
         private Harmony harmony;
 
@@ -102,7 +103,7 @@ namespace TradersExtended
             ConfigInit();
             _ = configSync.AddLockingConfigEntry(configLocked);
 
-            configsJSON.ValueChanged += new Action(LoadConfigs);
+            configsJSON.ValueChanged += new Action(StartConfigLoad);
 
             epicLootPlugin = GetComponent("EpicLoot");
 
@@ -168,7 +169,7 @@ namespace TradersExtended
             addCommonValuableItemsToSellList = config("Misc", "Add common valuable items to sell list", defaultValue: true, "Add common valuable items to all traders sell list.");
             fixedStoreGuiPosition = config("Misc", "Fixed position for Store GUI", defaultValue: Vector2.zero, "If set then Store GUI will take that absolute position.");
 
-            addCommonValuableItemsToSellList.SettingChanged += (sender, args) => LoadConfigs();
+            addCommonValuableItemsToSellList.SettingChanged += (sender, args) => StartConfigLoad();
             fixedStoreGuiPosition.SettingChanged += (sender, args) => StorePanel.SetStoreGuiAbsolutePosition();
 
             enableBuyBack = config("Trader buyback", "Enable buyback for last item sold", defaultValue: true, "First item to buy will be the last item you have recently sold.");
@@ -490,7 +491,12 @@ namespace TradersExtended
             configsJSON.AssignLocalValue(localConfig);
         }
 
-        private static void LoadConfigs()
+        private static void StartConfigLoad()
+        {
+            instance.StartCoroutine(LoadConfigs());
+        }
+
+        private static IEnumerator LoadConfigs()
         {
             tradeableItems.Clear();
             sellableItems.Clear();
@@ -508,7 +514,7 @@ namespace TradersExtended
             }
 
             if (addCommonValuableItemsToSellList.Value)
-                AddCommonValuableItems();
+                yield return AddCommonValuableItems();
         }
 
         private static void LoadTradeableItems(string JSON, string trader)
@@ -563,10 +569,9 @@ namespace TradersExtended
             sellableItems[listKey] = items;
         }
 
-        private static void AddCommonValuableItems()
+        private static IEnumerator AddCommonValuableItems()
         {
-            if (!ObjectDB.instance)
-                return;
+            yield return new WaitUntil(() => (bool)ObjectDB.instance);
 
             string listKey = CommonListKey(ItemsListType.Sell);
 

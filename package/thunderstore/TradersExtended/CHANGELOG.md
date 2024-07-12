@@ -1,3 +1,6 @@
+# 1.3.1
+* vanilla valuable item list fixed
+
 # 1.3.0
 * new Google Sheets JSON Helper for easy JSONs management (link and details in description)
 * new command "tradersextended itemlist" for item list export
