@@ -1,4 +1,5 @@
 ﻿using HarmonyLib;
+using BepInEx;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -190,10 +191,10 @@ namespace TradersExtended
             if (item.price == 0 || item.stack == 0)
                 return;
 
-            if (!string.IsNullOrEmpty(item.requiredGlobalKey) && item.requiredGlobalKey.Split(',').Select(s => s.Trim()).Any(s => !ZoneSystem.instance.GetGlobalKey(s)))
+            if (!string.IsNullOrEmpty(item.requiredGlobalKey) && item.requiredGlobalKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => !ZoneSystem.instance.GetGlobalKey(s)))
                 return;
 
-            if (!string.IsNullOrEmpty(item.notRequiredGlobalKey) && item.notRequiredGlobalKey.Split(',').Select(s => s.Trim()).Any(s => ZoneSystem.instance.GetGlobalKey(s)))
+            if (!string.IsNullOrEmpty(item.notRequiredGlobalKey) && item.notRequiredGlobalKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => ZoneSystem.instance.GetGlobalKey(s)))
                 return;
 
             if (!TryGetPriceKey(item, out string key))
@@ -620,6 +621,18 @@ namespace TradersExtended
         [HarmonyPatch(typeof(Trader), nameof(Trader.GetAvailableItems))]
         public static class Trader_GetAvailableItems_FilterAndFlexiblePrices
         {
+            public static bool ItemIsValid(ItemDrop item)
+            {
+                try
+                {
+                    return item.m_itemData.GetIcon() != null;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+
             [HarmonyPriority(Priority.Last)]
             public static void Postfix(List<Trader.TradeItem> __result)
             {
@@ -629,6 +642,8 @@ namespace TradersExtended
                 float factor = TraderCoins.GetPriceFactor(buyPrice: true);
                 for (int i = __result.Count - 1; i >= 0; i--)
                     if (!String.IsNullOrWhiteSpace(traderFilter.text) && Localization.instance.Localize(__result[i].m_prefab.m_itemData.m_shared.m_name).ToLower().IndexOf(traderFilter.text.ToLower()) == -1)
+                        __result.RemoveAt(i);
+                    else if (!ItemIsValid(__result[i].m_prefab))
                         __result.RemoveAt(i);
                     else
                     {
