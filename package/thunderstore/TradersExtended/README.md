@@ -107,6 +107,19 @@ More info in the spreadsheet itself.
 Credits for the idea, first implementation, testing and documentation for @MeowingInsanely!
 
 ### Tradeable item model
+
+```json
+{
+  "prefab": "PrefabName", 
+  "stack": 1,
+  "price": 100,
+  "requiredGlobalKey": "",
+  "notRequiredGlobalKey": "",
+  "requiredPlayerKey": "",
+  "notRequiredPlayerKey": "",
+}
+```
+
 * prefab - string - Prefab name of item. Column Item from [item list](https://valheim-modding.github.io/Jotunn/data/objects/item-list.html)
 * stack - integer - how many items in stack. If set to 0 then item will be ignored.
 * price - integer - price for stack. If set to 0 then item will be ignored.
@@ -121,7 +134,7 @@ Credits for the idea, first implementation, testing and documentation for @Meowi
 * I want to be able to buy a Boar meat for 10 coins
 * I want to be able to buy an Ancient Seed until Elder is killed
 * I want to be able to buy max quality Cultivator after I had Elder killed
-```
+```json
 [
   {
     "prefab": "DragonEgg", 
@@ -154,7 +167,7 @@ Credits for the idea, first implementation, testing and documentation for @Meowi
 * I want to be able to sell a Fishing rod for 200 coins
 * I want to be able to sell a stack of Wood for 25 coins after Elder was killed
 * I want to be able to sell Perch with 50 gold each but also sell x5 Perch of quality 4 for more.
-```
+```json
 [
   {
     "prefab": "FishingRod", 
