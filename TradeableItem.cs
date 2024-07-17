@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using System;
-using System.Collections;
+using BepInEx;
+using System.Linq;
 
 namespace TradersExtended
 {
@@ -17,6 +18,8 @@ namespace TradersExtended
             public int quality = 0;
             public string requiredGlobalKey = "";
             public string notRequiredGlobalKey = "";
+            public string requiredPlayerKey = "";
+            public string notRequiredPlayerKey = "";
 
             [NonSerialized]
             public ItemDrop itemDrop;
@@ -26,10 +29,16 @@ namespace TradersExtended
                 if (!ZoneSystem.instance || !ObjectDB.instance || !Player.m_localPlayer)
                     return false;
 
-                if (!string.IsNullOrEmpty(requiredGlobalKey) && !ZoneSystem.instance.GetGlobalKey(requiredGlobalKey))
+                if (!string.IsNullOrEmpty(requiredGlobalKey) && requiredGlobalKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => !ZoneSystem.instance.GetGlobalKey(s)))
                     return false;
 
-                if (!string.IsNullOrEmpty(notRequiredGlobalKey) && ZoneSystem.instance.GetGlobalKey(notRequiredGlobalKey))
+                if (!string.IsNullOrEmpty(notRequiredGlobalKey) && notRequiredGlobalKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => ZoneSystem.instance.GetGlobalKey(s)))
+                    return false;
+
+                if (!string.IsNullOrEmpty(requiredPlayerKey) && requiredPlayerKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => !Player.m_localPlayer.HaveUniqueKey(s)))
+                    return false;
+
+                if (!string.IsNullOrEmpty(notRequiredPlayerKey) && notRequiredPlayerKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => Player.m_localPlayer.HaveUniqueKey(s)))
                     return false;
 
                 GameObject itemPrefab = ObjectDB.instance.GetItemPrefab(prefab);

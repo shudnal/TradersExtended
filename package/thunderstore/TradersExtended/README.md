@@ -113,6 +113,8 @@ Credits for the idea, first implementation, testing and documentation for @Meowi
 * quality - integer - quality of item. If set to 0 then for buy list quality will be default and for sell list quality will not be checked
 * requiredGlobalKey - string, comma-separated - if set, then all global keys from the list should be set for item to appear. In other words if any global key is not set then item will not be available.
 * notRequiredGlobalKey - string, comma-separated - if set, then all global keys from the list should NOT be set for item to appear. In other words if any global key is set then item will not be available.
+* requiredPlayerKey - string, comma-separated - if set, then all player unique keys from the list should be set for item to appear. In other words if any player unique key is not set then item will not be available.
+* notRequiredPlayerKey - string, comma-separated - if set, then all player unique keys from the list should NOT be set for item to appear. In other words if any player unique key is set then item will not be available.
 
 ### Tradeable(Buy) list example
 * I want to be able to buy a Dragon egg for 500 coins after I had killed Moder

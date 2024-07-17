@@ -197,6 +197,12 @@ namespace TradersExtended
             if (!string.IsNullOrEmpty(item.notRequiredGlobalKey) && item.notRequiredGlobalKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => ZoneSystem.instance.GetGlobalKey(s)))
                 return;
 
+            if (!string.IsNullOrEmpty(item.requiredPlayerKey) && item.requiredPlayerKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => !Player.m_localPlayer.HaveUniqueKey(s)))
+                return;
+
+            if (!string.IsNullOrEmpty(item.notRequiredPlayerKey) && item.notRequiredPlayerKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => Player.m_localPlayer.HaveUniqueKey(s)))
+                return;
+
             if (!TryGetPriceKey(item, out string key))
                 return;
 

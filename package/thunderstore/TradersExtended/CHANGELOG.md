@@ -1,3 +1,6 @@
+# 1.3.3
+* player unique keys support
+
 # 1.3.2
 * protection from wrong prefabs
 
