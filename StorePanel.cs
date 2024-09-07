@@ -631,7 +631,7 @@ namespace TradersExtended
             {
                 try
                 {
-                    return item.m_itemData.GetIcon() != null;
+                    return item?.m_itemData?.GetIcon() != null;
                 }
                 catch
                 {
@@ -647,9 +647,9 @@ namespace TradersExtended
 
                 float factor = TraderCoins.GetPriceFactor(buyPrice: true);
                 for (int i = __result.Count - 1; i >= 0; i--)
-                    if (!String.IsNullOrWhiteSpace(traderFilter.text) && Localization.instance.Localize(__result[i].m_prefab.m_itemData.m_shared.m_name).ToLower().IndexOf(traderFilter.text.ToLower()) == -1)
-                        __result.RemoveAt(i);
-                    else if (!ItemIsValid(__result[i].m_prefab))
+                     if (!ItemIsValid(__result[i].m_prefab))
+                         __result.RemoveAt(i);
+                    else if(!String.IsNullOrWhiteSpace(traderFilter.text) && Localization.instance.Localize(__result[i].m_prefab.m_itemData.m_shared.m_name).ToLower().IndexOf(traderFilter.text.ToLower()) == -1)
                         __result.RemoveAt(i);
                     else
                     {
