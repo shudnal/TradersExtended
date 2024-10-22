@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using TMPro;
 using UnityEngine;
-using static TradersExtended.TraderCoins;
 using static TradersExtended.TradersExtended;
 
 namespace TradersExtended
@@ -26,7 +25,8 @@ namespace TradersExtended
             return new List<string>()
             {
                 "Haldor",
-                "Hildir"
+                "Hildir",
+                "BogWitch"
             }.Concat(tradersCustomPrefabs.Value.Split(',').Select(p => p.Trim()).Where(p => !string.IsNullOrWhiteSpace(p))).ToList();
         }
 
@@ -49,7 +49,7 @@ namespace TradersExtended
         {
             private static bool IsMorning(float oldDayFraction, float newDayFraction)
             {
-                return oldDayFraction > 0.2f && oldDayFraction < 0.25f && newDayFraction > 0.25f && newDayFraction < 0.3f;
+                return oldDayFraction > 0.2f && oldDayFraction < 0.25f && newDayFraction >= 0.25f && newDayFraction < 0.3f;
             }
 
             private static void Postfix(EnvMan __instance, float oldDayFraction, float newDayFraction)

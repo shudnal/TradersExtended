@@ -1,3 +1,6 @@
+# 1.3.4
+* minor refinements and bog witch preparations
+
 # 1.3.3
 * player unique keys support
 

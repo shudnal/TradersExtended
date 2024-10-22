@@ -54,7 +54,10 @@ namespace TradersExtended
             if (StoreGui.instance == null || !StorePanel.IsOpen())
                 return;
 
-            repairPanel.SetActive(traderRepair.Value);
+            repairPanel.SetActive(traderRepair.Value && (_tradersToRepairWeapons.Contains(storeGui.m_trader.m_name) 
+                                                      || _tradersToRepairWeapons.Contains(storeGui.m_trader.name) 
+                                                      || _tradersToRepairArmor.Contains(storeGui.m_trader.m_name) 
+                                                      || _tradersToRepairArmor.Contains(storeGui.m_trader.name)));
             repairButton.interactable = HaveRepairableItems(storeGui);
         }
 

@@ -22,7 +22,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.3.3";
+        private const string pluginVersion = "1.3.4";
 
         private Harmony harmony;
 
@@ -216,7 +216,7 @@ namespace TradersExtended
                 "save",
                 "itemlist"
             }, alwaysRefreshTabOptions: true, remoteCommand: false);
-            
+
             new Terminal.ConsoleCommand("settradercoins", "[trader] [amount]", delegate (Terminal.ConsoleEventArgs args)
             {
                 if (args.Length <= 1)
@@ -268,19 +268,6 @@ namespace TradersExtended
             List<ItemToExport> allItems = new List<ItemToExport>();
             HashSet<string> itemNames = new HashSet<string>();
 
-            var enemies = Resources.FindObjectsOfTypeAll<Humanoid>().Where(human => human.TryGetComponent<BaseAI>(out _));
-            foreach (Humanoid humanoid in enemies)
-                foreach (GameObject item in humanoid.m_defaultItems)
-                {
-                    if (!item.TryGetComponent(out ItemDrop itemDrop))
-                        continue;
-
-                    if (itemNames.Contains(item.name))
-                        continue;
-
-                    itemNames.Add(item.name);
-                }
-
             Trader[] traders = Resources.FindObjectsOfTypeAll<Trader>();
             foreach (Trader trader in traders)
                 foreach (Trader.TradeItem item in trader.m_items)
@@ -298,11 +285,26 @@ namespace TradersExtended
                     {
                         prfb = item.m_prefab.name,
                         name = Localization.instance.Localize(item.m_prefab.m_itemData.m_shared.m_name),
-                        sell= Math.Max(item.m_prefab.m_itemData.m_shared.m_value, 0),
-                        buy= item.m_price,
+                        sell = Math.Max(item.m_prefab.m_itemData.m_shared.m_value, 0),
+                        buy = item.m_price,
                         stack = item.m_stack,
-                        from = Localization.instance.Localize(trader.m_name)
+                        from = trader.name
                     });
+                }
+
+            allItems.Do(item => LogInfo($"{item.prfb} {item.from}"));
+
+            var enemies = Resources.FindObjectsOfTypeAll<Humanoid>().Where(human => human.TryGetComponent<BaseAI>(out _));
+            foreach (Humanoid humanoid in enemies)
+                foreach (GameObject item in humanoid.m_defaultItems)
+                {
+                    if (!item.TryGetComponent(out ItemDrop itemDrop))
+                        continue;
+
+                    if (itemNames.Contains(item.name))
+                        continue;
+
+                    itemNames.Add(item.name);
                 }
 
             foreach (GameObject prefab in ObjectDB.instance.m_items)

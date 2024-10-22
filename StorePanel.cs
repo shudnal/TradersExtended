@@ -117,10 +117,10 @@ namespace TradersExtended
             center = center || index == 0;
 
             for (int i = 0; i < sellItemList.Count; i++)
-                sellItemList[i].transform.Find("selected").gameObject.SetActive(i == index);
+                sellItemList[i]?.transform.Find("selected")?.gameObject.SetActive(i == index);
 
-            if (center && index >= 0)
-                itemEnsureVisible.CenterOnItem(sellItemList[index].transform as RectTransform);
+            if (center && index >= 0 && sellItemList[index] != null)
+                itemEnsureVisible?.CenterOnItem(sellItemList[index].transform as RectTransform);
 
             selectedItem = (index < 0) ? null : tempItems[index];
 
@@ -353,6 +353,7 @@ namespace TradersExtended
 
             float priceFactor = TraderCoins.GetPriceFactor(buyPrice: false);
 
+            //foreach (ItemDrop.ItemData item in Player.m_localPlayer.GetInventory().GetAllItemsSortedByName())
             foreach (ItemDrop.ItemData item in Player.m_localPlayer.GetInventory().GetAllItemsSorted())
             {
                 if (IgnoreItemForSell(item))
@@ -449,6 +450,7 @@ namespace TradersExtended
             {
                 buybackItem = null;
                 Player.m_localPlayer.GetInventory().RemoveItem(StoreGui.instance.m_coinPrefab.m_itemData.m_shared.m_name, store.m_selectedItem.m_price);
+                store.m_selectedItem = null;
                 StoreGui.instance.m_buyEffects.Create(StoreGui.instance.transform.position, Quaternion.identity);
                 StoreGui.instance.FillList();
             }
@@ -892,17 +894,17 @@ namespace TradersExtended
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.SelectItem))]
         public static class StoreGui_SelectItem_FixOutOfRangeForEmptyList
         {
-            private static void Prefix(List<GameObject> ___m_itemList, ref int index, ref bool center)
+            private static void Prefix(StoreGui __instance, ref int index, ref bool center)
             {
                 if (!modEnabled.Value)
                     return;
 
                 if (index >= 0)
                 {
-                    if (___m_itemList.Count == 0)
+                    if (__instance.m_itemList.Count == 0)
                         index = -1;
                     else
-                        index = Mathf.Clamp(index, 0, ___m_itemList.Count - 1);
+                        index = Mathf.Clamp(index, 0, __instance.m_itemList.Count - 1);
                 }
 
                 center = center || index == 0;
@@ -918,14 +920,18 @@ namespace TradersExtended
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.FillList))]
         public static class StoreGui_FillList_FillSellableList
         {
-            static bool Prefix(StoreGui __instance)
+            private static readonly List<Trader.TradeItem> availableItems = new List<Trader.TradeItem>();
+
+            public static bool Prefix(StoreGui __instance)
             {
                 if (!modEnabled.Value)
                     return true;
 
                 int playerCoins = __instance.GetPlayerCoins();
                 int num = __instance.GetSelectedItemIndex();
-                List<Trader.TradeItem> availableItems = __instance.m_trader.GetAvailableItems();
+                
+                availableItems.Clear();
+                availableItems.AddRange(__instance.m_trader.GetAvailableItems());
                 foreach (GameObject item in __instance.m_itemList)
                     UnityEngine.Object.Destroy(item);
 
@@ -1006,12 +1012,9 @@ namespace TradersExtended
                     __instance.m_itemList.Add(element);
                 }
 
-                if (num < 0)
-                    num = 0;
-
-                __instance.SelectItem(Mathf.Min(__instance.m_itemList.Count - 1, num), center: false);
-
                 FillSellableList(__instance);
+
+                __instance.SelectItem(Mathf.Clamp(num, 0, __instance.m_itemList.Count - 1), center: false);
 
                 return false;
             }
@@ -1047,11 +1050,11 @@ namespace TradersExtended
                 return true;
             }
 
-            [HarmonyPriority(Priority.Last)]
+            [HarmonyPriority(Priority.First)]
             public static void Postfix(StoreGui __instance, Tuple<int, int> __state)
             {
                 isCalled = false;
-                if (__state != null)
+                if (__state != null && __instance.m_selectedItem?.m_prefab?.m_itemData != null)
                 {
                     __instance.m_selectedItem.m_stack = __state.Item1;
                     __instance.m_selectedItem.m_prefab.m_itemData.m_quality = __state.Item2;
