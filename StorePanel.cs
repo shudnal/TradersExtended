@@ -353,8 +353,7 @@ namespace TradersExtended
 
             float priceFactor = TraderCoins.GetPriceFactor(buyPrice: false);
 
-            //foreach (ItemDrop.ItemData item in Player.m_localPlayer.GetInventory().GetAllItemsSortedByName())
-            foreach (ItemDrop.ItemData item in Player.m_localPlayer.GetInventory().GetAllItemsSorted())
+            foreach (ItemDrop.ItemData item in Player.m_localPlayer.GetInventory().GetAllItemsSortedByName())
             {
                 if (IgnoreItemForSell(item))
                     continue;
