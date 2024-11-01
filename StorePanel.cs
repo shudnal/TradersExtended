@@ -244,9 +244,9 @@ namespace TradersExtended
                 return true;
             else if (hideEquippedAndHotbarItems.Value && item.m_gridPos.y == 0 && item.IsEquipable()) // Ignore equippable item from first row (hotbar)
                 return true;
-            else if (hideEquippedAndHotbarItems.Value && item.m_gridPos.y > Player.m_localPlayer.GetInventory().GetHeight()) // Ignore every additional (hidden) inventory row
+            else if (hideEquippedAndHotbarItems.Value && AzuExtendedPlayerInventory.API.GetSlots().GetItemFuncs.Where(func => func != null).Select(func => func(Player.m_localPlayer)).Contains(item))
                 return true;
-            else if (AzuExtendedPlayerInventory.API.GetQuickSlotsItems().Contains(item))
+            else if (hideEquippedAndHotbarItems.Value && ExtraSlots.API.GetAllExtraSlotsItems().Contains(item))
                 return true;
 
             return false;
