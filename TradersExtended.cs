@@ -23,9 +23,9 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.3.5";
+        private const string pluginVersion = "1.3.6";
 
-        private Harmony harmony;
+        private readonly Harmony harmony = new Harmony(pluginID);
 
         internal static readonly ConfigSync configSync = new ConfigSync(pluginID) { DisplayName = pluginName, CurrentVersion = pluginVersion, MinimumRequiredVersion = pluginVersion };
 
@@ -92,7 +92,7 @@ namespace TradersExtended
 
         void Awake()
         {
-            harmony = Harmony.CreateAndPatchAll(Assembly.GetExecutingAssembly(), pluginID);
+            harmony.PatchAll();
 
             instance = this;
 
@@ -146,8 +146,8 @@ namespace TradersExtended
             coinsStackSize = config("Item coins", "Coins stack size", defaultValue: 2000, "Max size of coins stack");
 
             traderRepair = config("Trader repair", "Traders can repair items", defaultValue: true, "Traders will have an ability to repair items");
-            tradersToRepairWeapons = config("Trader repair", "Traders capable to repair weapons", defaultValue: "$npc_haldor", "Traders that have an ability to repair weapons");
-            tradersToRepairArmor = config("Trader repair", "Traders capable to repair armor", defaultValue: "$npc_hildir", "Traders that have an ability to repair armor");
+            tradersToRepairWeapons = config("Trader repair", "Traders capable to repair weapons", defaultValue: "Haldor", "Prefab name of Traders that have an ability to repair weapons");
+            tradersToRepairArmor = config("Trader repair", "Traders capable to repair armor", defaultValue: "Hildir", "Prefab name of Traders that have an ability to repair armor");
             traderRepairCost = config("Trader repair", "Traders repair cost", defaultValue: 2, "Cost of repair in gold");
 
             tradersToRepairWeapons.SettingChanged += (sender, args) => FillConfigLists();
@@ -289,7 +289,7 @@ namespace TradersExtended
                         sell = Math.Max(item.m_prefab.m_itemData.m_shared.m_value, 0),
                         buy = item.m_price,
                         stack = item.m_stack,
-                        from = trader.name
+                        from = Utils.GetPrefabName(trader.name)
                     });
                 }
 
@@ -354,8 +354,8 @@ namespace TradersExtended
         public static void FillConfigLists()
         {
             _ignoreItemDiscovery = new HashSet<string>(checkForDiscoveryIgnoreItems.Value.Split(',').Select(p => p.Trim().ToLower()).Where(p => !string.IsNullOrWhiteSpace(p)).ToList());
-            _tradersToRepairWeapons = new HashSet<string>(tradersToRepairWeapons.Value.Split(',').Select(p => p.Trim().ToLower()).Where(p => !string.IsNullOrWhiteSpace(p)).ToList());
-            _tradersToRepairArmor = new HashSet<string>(tradersToRepairArmor.Value.Split(',').Select(p => p.Trim().ToLower()).Where(p => !string.IsNullOrWhiteSpace(p)).ToList());
+            _tradersToRepairWeapons = new HashSet<string>(tradersToRepairWeapons.Value.Split(',').Select(p => TraderName(p.Trim())).Where(p => !string.IsNullOrWhiteSpace(p)).ToList());
+            _tradersToRepairArmor = new HashSet<string>(tradersToRepairArmor.Value.Split(',').Select(p => TraderName(p.Trim())).Where(p => !string.IsNullOrWhiteSpace(p)).ToList());
         }
 
         public static bool IgnoreItemDiscovery(string prefabName)
@@ -407,7 +407,7 @@ namespace TradersExtended
 
                 LogInfo($"Found {file.FullName}");
 
-                string listKey = TraderListKey(filename[2].ToLower(), list) + ".plugin";
+                string listKey = TraderListKey(filename[2], list) + ".plugin";
 
                 try
                 {
@@ -440,7 +440,7 @@ namespace TradersExtended
 
                 LogInfo($"Found {file.FullName}");
 
-                string listKey = TraderListKey(filename[2].ToLower(), list) + ".config";
+                string listKey = TraderListKey(filename[2], list) + ".config";
 
                 try
                 {
@@ -471,7 +471,7 @@ namespace TradersExtended
                 if (!Enum.TryParse(resName[1], true, out ItemsListType listType))
                     continue;
 
-                string list = TraderListKey(resName[0].ToLower(), listType) + ".internal";
+                string list = TraderListKey(resName[0], listType) + ".internal";
 
                 LogInfo($"Found resource {list}");
 
@@ -539,7 +539,7 @@ namespace TradersExtended
                 return;
             }
 
-            List<TradeableItem> items = tradeableItems[listKey].Concat(itemsFromFile).ToList();
+            List<TradeableItem> items = itemsFromFile == null ? new List<TradeableItem>() : tradeableItems[listKey].Concat(itemsFromFile).ToList();
 
             LogInfo($"Loaded {itemsFromFile.Count} tradeable item from {listKey}");
 
@@ -613,9 +613,19 @@ namespace TradersExtended
             return false;
         }
 
-        private static string TraderName(string name)
+        internal static string TraderName(Trader trader)
         {
-            return name.ToLower().Replace("$npc_", "");
+            return Utils.GetPrefabName(trader.name).ToLower().Replace("$npc_", "").Replace("npc_", "");
+        }
+
+        internal static string TraderName(string name)
+        {
+            return name.ToLower().Replace("$npc_", "").Replace("npc_", "");
+        }
+
+        public static string TraderListKey(Trader trader, ItemsListType type)
+        {
+            return TraderListKey(TraderName(trader), type);
         }
 
         public static string TraderListKey(string name, ItemsListType type)

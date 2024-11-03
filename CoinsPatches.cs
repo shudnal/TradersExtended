@@ -14,6 +14,9 @@ namespace TradersExtended
 
         public static void PatchCoinsItemData(ItemDrop.ItemData coins)
         {
+            if (!modEnabled.Value)
+                return;
+
             if (coins == null)
                 return;
 
@@ -98,6 +101,19 @@ namespace TradersExtended
             }
         }
 
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), typeof(ItemDrop.ItemData), typeof(int), typeof(int), typeof(int))]
+        private static class Inventory_AddItem_ItemData_amount_x_y_PatchCircletItemDataOnLoad
+        {
+            [HarmonyPriority(Priority.First)]
+            private static void Prefix(ItemDrop.ItemData item)
+            {
+                if (item.m_shared.m_name != itemDropNameCoins)
+                    return;
+
+                PatchCoinsItemData(item);
+            }
+        }
+
         [HarmonyPatch(typeof(ItemDrop), nameof(ItemDrop.Start))]
         public static class ItemDrop_Start_CoinsPatch
         {
@@ -109,7 +125,5 @@ namespace TradersExtended
                 PatchCoinsItemData(__instance.m_itemData);
             }
         }
-
-
     }
 }

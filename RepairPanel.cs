@@ -54,10 +54,7 @@ namespace TradersExtended
             if (StoreGui.instance == null || !StorePanel.IsOpen())
                 return;
 
-            repairPanel.SetActive(traderRepair.Value && (_tradersToRepairWeapons.Contains(storeGui.m_trader.m_name) 
-                                                      || _tradersToRepairWeapons.Contains(storeGui.m_trader.name) 
-                                                      || _tradersToRepairArmor.Contains(storeGui.m_trader.m_name) 
-                                                      || _tradersToRepairArmor.Contains(storeGui.m_trader.name)));
+            repairPanel.SetActive(traderRepair.Value && (_tradersToRepairWeapons.Contains(TraderName(storeGui.m_trader)) || _tradersToRepairArmor.Contains(TraderName(storeGui.m_trader))));
             repairButton.interactable = HaveRepairableItems(storeGui);
         }
 
@@ -121,7 +118,7 @@ namespace TradersExtended
                 item.m_shared.m_itemType == ItemData.ItemType.Torch ||
                 item.m_shared.m_itemType == ItemData.ItemType.TwoHandedWeapon ||
                 item.m_shared.m_itemType == ItemData.ItemType.TwoHandedWeaponLeft)
-                return _tradersToRepairWeapons.Contains(trader.m_name) || _tradersToRepairWeapons.Contains(trader.name);
+                return _tradersToRepairWeapons.Contains(TraderName(trader));
 
             if (item.m_shared.m_itemType == ItemData.ItemType.Helmet ||
                 item.m_shared.m_itemType == ItemData.ItemType.Chest ||
@@ -129,7 +126,7 @@ namespace TradersExtended
                 item.m_shared.m_itemType == ItemData.ItemType.Shoulder ||
                 item.m_shared.m_itemType == ItemData.ItemType.Utility ||
                 item.m_shared.m_itemType == ItemData.ItemType.Customization)
-                return _tradersToRepairArmor.Contains(trader.m_name) || _tradersToRepairArmor.Contains(trader.name);
+                return _tradersToRepairArmor.Contains(TraderName(trader));
 
             return false;
         }

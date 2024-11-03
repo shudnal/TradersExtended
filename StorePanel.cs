@@ -345,8 +345,8 @@ namespace TradersExtended
             tempItems.Clear();
             tempItemsPrice.Clear();
 
-            if (sellableItems.ContainsKey(TraderListKey(__instance.m_trader.m_name, ItemsListType.Sell)))
-                sellableItems[TraderListKey(__instance.m_trader.m_name, ItemsListType.Sell)].ForEach(item => AddItemToSellList(item));
+            if (sellableItems.ContainsKey(TraderListKey(__instance.m_trader, ItemsListType.Sell)))
+                sellableItems[TraderListKey(__instance.m_trader, ItemsListType.Sell)].ForEach(item => AddItemToSellList(item));
 
             if (sellableItems.ContainsKey(CommonListKey(ItemsListType.Sell)))
                 sellableItems[CommonListKey(ItemsListType.Sell)].ForEach(item => AddItemToSellList(item));
@@ -621,7 +621,7 @@ namespace TradersExtended
 
                 AddAvailableItems(CommonListKey(ItemsListType.Buy), __result);
 
-                AddAvailableItems(TraderListKey(__instance.m_name, ItemsListType.Buy), __result);
+                AddAvailableItems(TraderListKey(__instance, ItemsListType.Buy), __result);
             }
         }
 

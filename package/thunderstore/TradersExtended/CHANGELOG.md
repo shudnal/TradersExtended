@@ -1,3 +1,6 @@
+# 1.3.6
+* correct implementation of bog witch trader name
+
 # 1.3.5
 * bog witch
 
