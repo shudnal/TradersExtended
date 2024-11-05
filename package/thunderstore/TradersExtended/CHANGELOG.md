@@ -1,3 +1,6 @@
+# 1.3.7
+* proper alignment for sell list elements
+
 # 1.3.6
 * correct implementation of bog witch trader name
 

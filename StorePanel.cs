@@ -383,7 +383,10 @@ namespace TradersExtended
 
                 GameObject element = UnityEngine.Object.Instantiate(listElement, listRoot);
                 element.SetActive(value: true);
-                (element.transform as RectTransform).anchoredPosition = new Vector2(0f, (float)i * (0f - __instance.m_itemSpacing));
+
+                RectTransform rectTransform = element.transform as RectTransform;
+                float num2 = (__instance.m_listRoot.rect.width - rectTransform.rect.width) / 2f;
+                rectTransform.anchoredPosition = new Vector2(num2, i * (0f - __instance.m_itemSpacing) - num2);
 
                 bool canSell = TraderCoins.CanSell(tradeItem.price);
 
