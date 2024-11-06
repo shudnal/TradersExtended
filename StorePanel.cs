@@ -485,8 +485,8 @@ namespace TradersExtended
                 playerFilterRT.sizeDelta -= new Vector2(0f, 10f);
 
                 GuiInputField filter = filterField.GetComponent<GuiInputField>();
-                filter.VirtualKeyboardTitle = "$keyboard_FilterField";
-                filter.transform.Find("Text Area/Placeholder").GetComponent<TMP_Text>().SetText(Localization.instance.Localize("$keyboard_FilterField"));
+                filter.VirtualKeyboardTitle = "$menu_filter";
+                filter.transform.Find("Text Area/Placeholder").GetComponent<TMP_Text>().SetText(Localization.instance.Localize("$menu_filter"));
 
                 return filter;
             }
