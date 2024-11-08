@@ -76,13 +76,15 @@ Defaults:
 * are case insensitive for Windows
 * should start with mod ID "shudnal.TradersExtended" and should have a ".json" extension (case sensitive for \*nix)
 * should include trader name (or "common") and list type (buy/sell)
-* can be set for nonstandard trader name
+* can be set for nonstandard trader name (both m_name and prefab name work)
 
 Config file names for example:
-* shudnal.TradersExtended.haldor.buy.json (items to buy from haldor (ingame name $npc_haldor))
-* shudnal.TradersExtended.haldor.sell.json (items to sell to haldor (ingame name $npc_haldor))
-* shudnal.TradersExtended.hildir.buy.json (items to buy from hildir (ingame name $npc_hildir))
-* shudnal.TradersExtended.hildir.sell.json (items to sell to hildir (ingame name $npc_hildir))
+* shudnal.TradersExtended.haldor.buy.json (items to buy from Haldor)
+* shudnal.TradersExtended.haldor.sell.json (items to sell to Haldor)
+* shudnal.TradersExtended.hildir.buy.json (items to buy from Hildir)
+* shudnal.TradersExtended.hildir.sell.json (items to sell to Hildir)
+* shudnal.TradersExtended.bogwitch.buy.json (items to sell to Bog Witch)
+* shudnal.TradersExtended.bogwitch.buy.json (items to sell to Bog Witch)
 * shudnal.TradersExtended.common.buy.json (items to buy from all traders)
 * shudnal.TradersExtended.common.sell.json (items to sell to all traders)
 
