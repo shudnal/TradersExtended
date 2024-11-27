@@ -23,7 +23,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.3.7";
+        private const string pluginVersion = "1.3.8";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -171,7 +171,7 @@ namespace TradersExtended
             fixedStoreGuiPosition = config("Misc", "Fixed position for Store GUI", defaultValue: Vector2.zero, "If set then Store GUI will take that absolute position.");
 
             addCommonValuableItemsToSellList.SettingChanged += (sender, args) => StartConfigLoad();
-            fixedStoreGuiPosition.SettingChanged += (sender, args) => StorePanel.SetStoreGuiAbsolutePosition();
+            fixedStoreGuiPosition.SettingChanged += (sender, args) => StorePanel.SetStoreGuiPosition();
 
             enableBuyBack = config("Trader buyback", "Enable buyback for last item sold", defaultValue: true, "First item to buy will be the last item you have recently sold.");
             colorBuybackNormal = config("Trader buyback", "Item background color", defaultValue: new Color(0f, 0.42f, 0.42f), "Color of buyback item background.");

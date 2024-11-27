@@ -49,12 +49,14 @@ namespace TradersExtended
             repairButton.GetComponent<UIGamePad>().m_blockingElements.Add(blocker);
         }
 
+        public static bool TraderCanRepair(Trader trader) => traderRepair.Value && (_tradersToRepairWeapons.Contains(TraderName(trader)) || _tradersToRepairArmor.Contains(TraderName(trader)));
+
         public static void Update(StoreGui storeGui)
         {
             if (StoreGui.instance == null || !StorePanel.IsOpen())
                 return;
 
-            repairPanel.SetActive(traderRepair.Value && (_tradersToRepairWeapons.Contains(TraderName(storeGui.m_trader)) || _tradersToRepairArmor.Contains(TraderName(storeGui.m_trader))));
+            repairPanel.SetActive(TraderCanRepair(storeGui.m_trader));
             repairButton.interactable = HaveRepairableItems(storeGui);
         }
 

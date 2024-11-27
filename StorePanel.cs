@@ -8,10 +8,11 @@ using UnityEngine.UI;
 using UnityEngine;
 using static TradersExtended.TradersExtended;
 using GUIFramework;
+using System.Reflection;
 
 namespace TradersExtended
 {
-    internal class StorePanel
+    internal static class StorePanel
     {
         public class ItemToSell
         {
@@ -67,8 +68,6 @@ namespace TradersExtended
         private static GuiInputField traderFilter;
         private static GuiInputField playerFilter;
 
-        private static bool epicLootEnabled;
-
         internal static readonly List<GameObject> sellItemList = new List<GameObject>();
         internal static readonly List<ItemToSell> tempItems = new List<ItemToSell>();
         internal static readonly Dictionary<string, Dictionary<int, int>> tempItemsPrice = new Dictionary<string, Dictionary<int, int>>();
@@ -78,10 +77,12 @@ namespace TradersExtended
 
         private static ItemToSell buybackItem;
 
-        public static bool IsOpen()
-        {
-            return sellPanel != null && sellPanel.gameObject.activeInHierarchy;
-        }
+        private static Func<bool> _adventureModeEnabled;
+        private static Vector3 defaultStorePosition;
+
+        public static bool AdventureModeEnabled(Trader trader) => _adventureModeEnabled != null && Utils.GetPrefabName(trader.gameObject) == "Haldor" && _adventureModeEnabled();
+
+        public static bool IsOpen() => sellPanel != null && sellPanel.gameObject.activeInHierarchy;
 
         public static void OnSelectedItem(GameObject button)
         {
@@ -460,12 +461,20 @@ namespace TradersExtended
             return result;
         }
 
-        public static void SetStoreGuiAbsolutePosition()
+        public static void SetStoreGuiPosition()
         {
-            if (fixedStoreGuiPosition.Value == Vector2.zero || StoreGui.instance == null || StoreGui.instance.m_rootPanel == null)
+            if (StoreGui.instance == null || StoreGui.instance.m_rootPanel == null)
                 return;
 
-            StoreGui.instance.m_rootPanel.transform.localPosition = fixedStoreGuiPosition.Value;
+            if (defaultStorePosition == Vector3.zero)
+                defaultStorePosition = StoreGui.instance.m_rootPanel.transform.localPosition;
+
+            if (fixedStoreGuiPosition.Value != Vector2.zero)
+                StoreGui.instance.m_rootPanel.transform.localPosition = fixedStoreGuiPosition.Value;
+            else
+                StoreGui.instance.m_rootPanel.transform.localPosition = AdventureModeEnabled(StoreGui.instance.m_trader)
+                                                                        ? defaultStorePosition - new Vector3(RepairPanel.TraderCanRepair(StoreGui.instance.m_trader) ? 146f : 100f, 0f, 0f) 
+                                                                        : defaultStorePosition;
         }
 
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Awake))]
@@ -585,18 +594,11 @@ namespace TradersExtended
                 RepairPanel.AddButtonBlocker(amountDialog);
 
                 // Move store to the left to create space between
-                epicLootEnabled = epicLootPlugin != null;
-                if (epicLootEnabled)
+                if (epicLootPlugin != null)
                 {
-                    var EpicLootPluginType = epicLootPlugin.GetType();
-                    var IsAdventureModeEnabledMethod = AccessTools.Method(EpicLootPluginType, "IsAdventureModeEnabled");
+                    MethodInfo IsAdventureModeEnabledMethod = AccessTools.Method(epicLootPlugin.GetType(), "IsAdventureModeEnabled");
                     if (IsAdventureModeEnabledMethod != null)
-                    {
-                        bool isAdventureModeEnabled = (bool)MethodInvoker.GetHandler(IsAdventureModeEnabledMethod)(null);
-                        LogInfo($"EpicLoot found. Adventure mode: {isAdventureModeEnabled}");
-                        if (isAdventureModeEnabled)
-                            __instance.m_rootPanel.transform.localPosition -= new Vector3(traderRepair.Value ? 146f : 100f, 0f, 0f);
-                    }
+                        _adventureModeEnabled = () => (bool)IsAdventureModeEnabledMethod.Invoke(null, null);
                 }
 
                 // Move original tooltip anchor to the side
@@ -712,7 +714,7 @@ namespace TradersExtended
                 playerFilter.SetTextWithoutNotify("");
                 traderFilter.SetTextWithoutNotify("");
 
-                SetStoreGuiAbsolutePosition();
+                SetStoreGuiPosition();
             }
         }
 

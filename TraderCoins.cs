@@ -8,7 +8,7 @@ using static TradersExtended.TradersExtended;
 
 namespace TradersExtended
 {
-    internal class TraderCoins
+    internal static class TraderCoins
     {
         private static ZNetView traderNetView;
 

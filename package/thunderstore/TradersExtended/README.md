@@ -218,3 +218,6 @@ Tool for that mod [Traders Extended - JSON Helper](https://docs.google.com/sprea
 
 ## Mirrors
 [Nexus](https://www.nexusmods.com/valheim/mods/2509)
+
+## Donation
+[Buy Me a Coffee](https://buymeacoffee.com/shudnal)

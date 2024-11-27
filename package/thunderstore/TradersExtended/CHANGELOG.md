@@ -1,3 +1,6 @@
+# 1.3.8
+* store panel position will better adapt with EpicLoot adventure mode
+
 # 1.3.7
 * proper alignment for sell list elements
 

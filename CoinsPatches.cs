@@ -5,7 +5,7 @@ using static TradersExtended.TradersExtended;
 
 namespace TradersExtended
 {
-    internal class CoinsPatches
+    internal static class CoinsPatches
     {
         public const string itemNameCoins = "Coins";
         public const string itemDropNameCoins = "$item_coins";
