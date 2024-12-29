@@ -256,12 +256,12 @@ namespace TradersExtended
 
         public class ItemToExport
         {
-            public string prfb;
-            public string name;
-            public int sell = 0;
-            public int buy = 0;
-            public int stack = 0;
-            public string from = "";
+            public string p;
+            public string n;
+            public int se;
+            public int b;
+            public int s;
+            public string f;
         }
 
         public static void ExportItemListFromObjectDB(Terminal context)
@@ -284,16 +284,16 @@ namespace TradersExtended
 
                     allItems.Add(new ItemToExport()
                     {
-                        prfb = item.m_prefab.name,
-                        name = Localization.instance.Localize(item.m_prefab.m_itemData.m_shared.m_name),
-                        sell = Math.Max(item.m_prefab.m_itemData.m_shared.m_value, 0),
-                        buy = item.m_price,
-                        stack = item.m_stack,
-                        from = Utils.GetPrefabName(trader.name)
+                        p = item.m_prefab.name,
+                        n = Localization.instance.Localize(item.m_prefab.m_itemData.m_shared.m_name),
+                        se = Math.Max(item.m_prefab.m_itemData.m_shared.m_value, 0),
+                        b = item.m_price,
+                        s = item.m_stack,
+                        f = Utils.GetPrefabName(trader.name)
                     });
                 }
 
-            allItems.Do(item => LogInfo($"{item.prfb} {item.from}"));
+            allItems.Do(item => LogInfo($"{item.p} {item.f}"));
 
             var enemies = Resources.FindObjectsOfTypeAll<Humanoid>().Where(human => human.TryGetComponent<BaseAI>(out _));
             foreach (Humanoid humanoid in enemies)
@@ -322,16 +322,23 @@ namespace TradersExtended
                     continue;
 
                 if (itemDrop.m_itemData.m_shared.m_description == null ||
-                    itemDrop.m_itemData.m_shared.m_itemType == ItemDrop.ItemData.ItemType.None || 
+                    itemDrop.m_itemData.m_shared.m_itemType == ItemDrop.ItemData.ItemType.None ||
                     itemDrop.m_itemData.m_shared.m_itemType == ItemDrop.ItemData.ItemType.Customization)
                     continue;
 
-                allItems.Add(new ItemToExport()
-                {
-                    prfb = itemDrop.name,
-                    name = Localization.instance.Localize(itemDrop.m_itemData.m_shared.m_name),
-                    sell = Math.Max(itemDrop.m_itemData.m_shared.m_value, 0),
-                });
+                if (itemDrop.m_itemData.m_shared.m_value > 0)
+                    allItems.Add(new ItemToExport()
+                    {
+                        p = itemDrop.name,
+                        n = Localization.instance.Localize(itemDrop.m_itemData.m_shared.m_name),
+                        se = itemDrop.m_itemData.m_shared.m_value,
+                    });
+                else
+                    allItems.Add(new ItemToExport()
+                    {
+                        p = itemDrop.name,
+                        n = Localization.instance.Localize(itemDrop.m_itemData.m_shared.m_name)
+                    });
             }
 
             JsonSerializerSettings settings = new JsonSerializerSettings
@@ -341,7 +348,7 @@ namespace TradersExtended
                 DefaultValueHandling = DefaultValueHandling.Ignore
             };
 
-            string JSON = JsonConvert.SerializeObject(allItems.OrderBy(item => item.prfb).OrderByDescending(item => item.from), settings);
+            string JSON = JsonConvert.SerializeObject(allItems.OrderBy(item => item.p).OrderByDescending(item => item.f), settings);
 
             Directory.CreateDirectory(Path.Combine(configDirectory.FullName, pluginID));
             string filename = Path.Combine(configDirectory.FullName, pluginID, "ItemList.json");
