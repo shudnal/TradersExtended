@@ -1,3 +1,8 @@
+# 1.3.9
+* new config option to remove extra coins until maximum amount is reached
+* fixed occasional issue when coins were not updated daily
+* more condensed format of itemlist.json export file for JSON Helper to make it possible to export more items (create another copy of JSON Helper spreadsheet to be able to import)
+
 # 1.3.8
 * store panel position will better adapt with EpicLoot adventure mode
 

@@ -23,7 +23,7 @@ namespace TradersExtended
     {
         private const string pluginID = "shudnal.TradersExtended";
         private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.3.8";
+        private const string pluginVersion = "1.3.9";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -49,10 +49,12 @@ namespace TradersExtended
         public static ConfigEntry<bool> traderUseFlexiblePricing;
         public static ConfigEntry<int> traderCoinsMinimumAmount;
         public static ConfigEntry<int> traderCoinsIncreaseAmount;
+        public static ConfigEntry<int> traderCoinsDecreaseAmount;
         public static ConfigEntry<int> traderCoinsMaximumAmount;
         public static ConfigEntry<float> traderDiscount;
         public static ConfigEntry<float> traderMarkup;
         public static ConfigEntry<int> traderCoinsReplenishmentRate;
+        public static ConfigEntry<bool> traderCoinsSendReplenishmentMessage;
 
         public static ConfigEntry<bool> coinsPatch;
         public static ConfigEntry<float> coinsWeight;
@@ -158,10 +160,12 @@ namespace TradersExtended
 
             traderCoinsMinimumAmount = config("Trader coins pricing", "Amount of coins after replenishment minimum", defaultValue: 2000, "Minimum amount of coins trader will have after replenishment.");
             traderCoinsIncreaseAmount = config("Trader coins pricing", "Amount of coins replenished daily", defaultValue: 1000, "Amount of coins added to current amount until maximum is reached");
+            traderCoinsDecreaseAmount = config("Trader coins pricing", "Amount of coins removed daily", defaultValue: 0, "Amount of coins removed from current amount until maximum is reached");
             traderCoinsMaximumAmount = config("Trader coins pricing", "Amount of coins after replenishment maximum", defaultValue: 6000, "Maximum amount of coins for replenishments to stop.");
             traderDiscount = config("Trader coins pricing", "Trader discount", defaultValue: 0.7f, "Discount for items to buy from trader when current amount of coins is more than maximum replenishment amount.");
             traderMarkup = config("Trader coins pricing", "Trader markup", defaultValue: 1.5f, "Markup for items to buy from trader when current amount of coins is less than minimum replenishment amount.");
             traderCoinsReplenishmentRate = config("Trader coins pricing", "Trader coins replenishment rate in days", defaultValue: 1, "Amount of coins is updated at morning");
+            traderCoinsSendReplenishmentMessage = config("Trader coins pricing", "Send replenishment message in the morning", defaultValue: true, "Show message when trader coins are updated");
 
             tradersCustomPrefabs = config("Misc", "Custom traders prefab names", defaultValue: "", "List of custom prefab names of Trader added by mods to control coins. Prefab name, case sensitive, comma separated");
             disableVanillaItems = config("Misc", "Disable vanilla items", defaultValue: false, "Disable vanilla items on traders. Custom traders could or could not work depending on their implementation.");

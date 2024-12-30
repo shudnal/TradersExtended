@@ -44,44 +44,50 @@ namespace TradersExtended
             }
         }
 
+        public static void UpdateTradersCoinsDaily()
+        {
+            HashSet<int> traderPrefabs = new HashSet<int>(GetTraderPrefabs().Select(selector => selector.GetStableHashCode()));
+
+            foreach (ZDO zdo in ZDOMan.instance.m_objectsByID.Values.Where(zdo => traderPrefabs.Contains(zdo.GetPrefab())))
+            {
+                int coinsReplenished = zdo.GetInt(s_traderCoinsReplenished);
+                if (EnvMan.instance.GetCurrentDay() - coinsReplenished < traderCoinsReplenishmentRate.Value)
+                    continue;
+
+                int currentAmount = zdo.GetInt(s_traderCoins);
+                if (currentAmount >= traderCoinsMaximumAmount.Value && traderCoinsDecreaseAmount.Value <= 0)
+                    continue;
+
+                int newAmount = currentAmount >= traderCoinsMaximumAmount.Value ?
+                                Math.Max(traderCoinsMaximumAmount.Value, currentAmount - traderCoinsDecreaseAmount.Value) :
+                                Mathf.Clamp(currentAmount + traderCoinsIncreaseAmount.Value, traderCoinsMinimumAmount.Value, traderCoinsMaximumAmount.Value);
+
+                zdo.Set(s_traderCoins, newAmount);
+                zdo.Set(s_traderCoinsReplenished, EnvMan.instance.GetCurrentDay());
+                LogInfo($"{ZNetScene.instance.GetPrefab(zdo.GetPrefab())?.name} coins updated {currentAmount} -> {newAmount}");
+            }
+        }
+
         [HarmonyPatch(typeof(EnvMan), nameof(EnvMan.UpdateTriggers))]
         public static class EnvMan_UpdateTriggers_TraderCoinsUpdate
         {
-            private static bool IsMorning(float oldDayFraction, float newDayFraction)
-            {
-                return oldDayFraction > 0.2f && oldDayFraction < 0.25f && newDayFraction >= 0.25f && newDayFraction < 0.3f;
-            }
+            private static bool IsMorning(float oldDayFraction, float newDayFraction) => oldDayFraction > 0.2f && oldDayFraction < 0.25f && newDayFraction >= 0.25f && newDayFraction < 0.3f;
 
             private static void Postfix(EnvMan __instance, float oldDayFraction, float newDayFraction)
             {
                 if (!traderUseCoins.Value)
                     return;
 
-                if (!IsMorning(oldDayFraction, newDayFraction))
-                    return;
-
-                MessageHud.instance?.ShowMessage(MessageHud.MessageType.TopLeft, "$store_topic: $msg_added $item_coins");
-
                 if (!ZNet.instance.IsServer())
                     return;
 
-                HashSet<int> traderPrefabs = new HashSet<int>(GetTraderPrefabs().Select(selector => selector.GetStableHashCode()));
+                if (!IsMorning(oldDayFraction, newDayFraction))
+                    return;
+                
+                UpdateTradersCoinsDaily();
 
-                foreach (ZDO zdo in ZDOMan.instance.m_objectsByID.Values.Where(zdo => traderPrefabs.Contains(zdo.GetPrefab())))
-                {
-                    int coinsReplenished = zdo.GetInt(s_traderCoinsReplenished);
-                    if (__instance.GetCurrentDay() - coinsReplenished < traderCoinsReplenishmentRate.Value)
-                        continue;
-
-                    int current = zdo.GetInt(s_traderCoins);
-                    if (current >= traderCoinsMaximumAmount.Value)
-                        continue;
-
-                    int newAmount = Mathf.Clamp(current + traderCoinsIncreaseAmount.Value, traderCoinsMinimumAmount.Value, traderCoinsMaximumAmount.Value);
-                    zdo.Set(s_traderCoins, newAmount);
-                    zdo.Set(s_traderCoinsReplenished, __instance.GetCurrentDay());
-                    LogInfo($"{ZNetScene.instance.GetPrefab(zdo.GetPrefab())?.name} coins updated {current} -> {newAmount}");
-                }
+                if (traderCoinsSendReplenishmentMessage.Value)
+                    MessageHud.instance?.MessageAll(MessageHud.MessageType.TopLeft, "$store_topic: $msg_added $item_coins");
             }
         }
 
