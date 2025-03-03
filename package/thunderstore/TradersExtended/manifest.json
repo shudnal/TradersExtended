@@ -1,6 +1,6 @@
 {
   "name": "TradersExtended",
-  "version_number": "1.3.9",
+  "version_number": "1.3.10",
   "website_url": "https://github.com/shudnal/TradersExtended",
   "description": "Trader specific buy and sell items lists. Store UI with sell list, filter and repair button. Gamepad support. Trader use coins. Markups and discounts.",
   "dependencies": ["denikson-BepInExPack_Valheim-5.4.2202"]

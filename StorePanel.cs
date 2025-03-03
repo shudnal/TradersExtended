@@ -616,6 +616,7 @@ namespace TradersExtended
         public static class Trader_GetAvailableItems_FillBuyableItems
         {
             [HarmonyPriority(Priority.First)]
+            [HarmonyAfter("org.bepinex.plugins.travelinghaldor")]
             private static void Postfix(Trader __instance, List<Trader.TradeItem> __result)
             {
                 if (!modEnabled.Value)

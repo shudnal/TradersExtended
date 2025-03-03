@@ -1,3 +1,6 @@
+# 1.3.10
+* compatibility with TravelingHaldor
+
 # 1.3.9
 * new config option to remove extra coins until maximum amount is reached
 * fixed occasional issue when coins were not updated daily
