@@ -1,3 +1,7 @@
+# 1.3.11
+* patch 0.220.3
+* ServerSync updated
+
 # 1.3.10
 * compatibility with TravelingHaldor
 

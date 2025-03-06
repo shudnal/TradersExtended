@@ -21,9 +21,9 @@ namespace TradersExtended
     [BepInIncompatibility("randyknapp.mods.auga")]
     public partial class TradersExtended : BaseUnityPlugin
     {
-        private const string pluginID = "shudnal.TradersExtended";
-        private const string pluginName = "Traders Extended";
-        private const string pluginVersion = "1.3.10";
+        public const string pluginID = "shudnal.TradersExtended";
+        public const string pluginName = "Traders Extended";
+        public const string pluginVersion = "1.3.11";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
