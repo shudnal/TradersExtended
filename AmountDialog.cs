@@ -350,15 +350,7 @@ namespace TradersExtended
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.OnSelectedItem))]
         public static class StoreGui_OnSelectedItem_SelectItem
         {
-            static void Postfix()
-            {
-                if (!modEnabled.Value)
-                    return;
-
-                OnSelectedTradeableItemClick(sellDialog: false);
-            }
+            static void Postfix() => OnSelectedTradeableItemClick(sellDialog: false);
         }
-
-
     }
 }

@@ -96,9 +96,6 @@ namespace TradersExtended
         {
             private static void Postfix(StoreGui __instance)
             {
-                if (!modEnabled.Value)
-                    return;
-
                 if (!StorePanel.IsOpen())
                     return;
 
@@ -122,9 +119,6 @@ namespace TradersExtended
 
             public static void Postfix(Inventory __instance, string name, int __state)
             {
-                if (!modEnabled.Value)
-                    return;
-
                 if (name != CoinsPatches.itemDropNameCoins || __state == 0)
                     return;
 
@@ -143,9 +137,6 @@ namespace TradersExtended
         {
             public static void Postfix(Inventory __instance, string name, int stack, ItemDrop.ItemData __result)
             {
-                if (!modEnabled.Value)
-                    return;
-
                 if (__result == null)
                     return;
 

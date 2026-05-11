@@ -1,3 +1,7 @@
+# 1.3.13
+* more compatibility with other mods in buy item list
+* new config to remove other mods items from buy list entirely
+
 # 1.3.12
 * Call To Arms patch
 * fixed console error when loading empty JSON file

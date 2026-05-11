@@ -1,14 +1,14 @@
-﻿using HarmonyLib;
-using BepInEx;
+﻿using BepInEx;
+using GUIFramework;
+using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using TMPro;
-using UnityEngine.UI;
-using UnityEngine;
-using static TradersExtended.TradersExtended;
-using GUIFramework;
 using System.Reflection;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+using static TradersExtended.TradersExtended;
 
 namespace TradersExtended
 {
@@ -503,9 +503,6 @@ namespace TradersExtended
             [HarmonyPriority(Priority.First)]
             static void Postfix(StoreGui __instance)
             {
-                if (!modEnabled.Value)
-                    return;
-
                 FillConfigLists();
 
                 // Add copy of main panel to use as sell list
@@ -613,26 +610,7 @@ namespace TradersExtended
         }
 
         [HarmonyPatch(typeof(Trader), nameof(Trader.GetAvailableItems))]
-        public static class Trader_GetAvailableItems_FillBuyableItems
-        {
-            [HarmonyPriority(Priority.First)]
-            [HarmonyAfter("org.bepinex.plugins.travelinghaldor")]
-            private static void Postfix(Trader __instance, List<Trader.TradeItem> __result)
-            {
-                if (!modEnabled.Value)
-                    return;
-
-                if (disableVanillaItems.Value)
-                    __result.Clear();
-
-                AddAvailableItems(CommonListKey(ItemsListType.Buy), __result);
-
-                AddAvailableItems(TraderListKey(__instance, ItemsListType.Buy), __result);
-            }
-        }
-
-        [HarmonyPatch(typeof(Trader), nameof(Trader.GetAvailableItems))]
-        public static class Trader_GetAvailableItems_FilterAndFlexiblePrices
+        public static class Trader_GetAvailableItems_FinalizeItems
         {
             public static bool ItemIsValid(ItemDrop item)
             {
@@ -646,35 +624,171 @@ namespace TradersExtended
                 }
             }
 
+            [HarmonyFinalizer]
             [HarmonyPriority(Priority.Last)]
-            public static void Postfix(List<Trader.TradeItem> __result)
+            public static Exception Finalizer(Exception __exception, Trader __instance, ref List<Trader.TradeItem> __result)
             {
-                if (!modEnabled.Value)
-                    return;
+                if (__exception != null)
+                    return __exception;
 
-                float factor = TraderCoins.GetPriceFactor(buyPrice: true);
-                for (int i = __result.Count - 1; i >= 0; i--)
-                     if (!ItemIsValid(__result[i].m_prefab))
-                         __result.RemoveAt(i);
-                    else if(!String.IsNullOrWhiteSpace(traderFilter.text) && Localization.instance.Localize(__result[i].m_prefab.m_itemData.m_shared.m_name).ToLower().IndexOf(traderFilter.text.ToLower()) == -1)
-                        __result.RemoveAt(i);
-                    else
-                    {
-                        __result[i] = JsonUtility.FromJson<Trader.TradeItem>(JsonUtility.ToJson(__result[i]));
-                        if (traderUseFlexiblePricing.Value)
-                        {
-                            __result[i].m_price = Math.Max((int)(__result[i].m_price * factor), 1);
-                            TradeableItem.NormalizeStack(__result[i]);
-                        }
-                    }
+                if (__instance == null)
+                    return null;
+
+                if (__result == null)
+                    __result = new List<Trader.TradeItem>();
+
+                if (disableOtherModsItems.Value)
+                {
+                    __result.Clear();
+
+                    if (!disableVanillaItems.Value)
+                        AddVanillaAvailableItems(__instance, __result);
+                }
+                else if (disableVanillaItems.Value)
+                {
+                    RemoveVanillaItems(__instance, __result);
+                }
+
+                AddAvailableItems(CommonListKey(ItemsListType.Buy), __result);
+                AddAvailableItems(TraderListKey(__instance, ItemsListType.Buy), __result);
+
+                ApplyFilterAndFlexiblePrices(__result);
 
                 if (enableBuyBack.Value && buybackItem != null)
+                {
                     __result.Insert(0, ItemToSell.SetBuyBackItem(new Trader.TradeItem()
                     {
                         m_prefab = null,
                         m_stack = 0,
                         m_price = buybackItem.price
                     }));
+                }
+
+                return null;
+            }
+
+            private static void AddVanillaAvailableItems(Trader trader, List<Trader.TradeItem> result)
+            {
+                List<Trader.TradeItem> vanillaItems = trader.m_items;
+
+                if (vanillaItems == null || vanillaItems.Count == 0)
+                    return;
+
+                for (int i = 0; i < vanillaItems.Count; i++)
+                {
+                    Trader.TradeItem item = vanillaItems[i];
+
+                    if (item == null)
+                        continue;
+
+                    if (string.IsNullOrEmpty(item.m_requiredGlobalKey) || ZoneSystem.instance.GetGlobalKey(item.m_requiredGlobalKey))
+                        result.Add(item);
+                }
+            }
+
+            private static void RemoveVanillaItems(Trader trader, List<Trader.TradeItem> result)
+            {
+                if (result == null || result.Count == 0)
+                    return;
+
+                List<Trader.TradeItem> vanillaItems = trader.m_items;
+
+                if (vanillaItems == null || vanillaItems.Count == 0)
+                    return;
+
+                if (result.Count == vanillaItems.Count)
+                {
+                    bool sameItems = true;
+
+                    for (int i = 0; i < result.Count; i++)
+                    {
+                        if (!ReferenceEquals(result[i], vanillaItems[i]))
+                        {
+                            sameItems = false;
+                            break;
+                        }
+                    }
+
+                    if (sameItems)
+                    {
+                        result.Clear();
+                        return;
+                    }
+                }
+
+                HashSet<Trader.TradeItem> vanillaSet = new HashSet<Trader.TradeItem>(vanillaItems);
+
+                int writeIndex = 0;
+
+                for (int readIndex = 0; readIndex < result.Count; readIndex++)
+                {
+                    Trader.TradeItem item = result[readIndex];
+
+                    if (item == null || vanillaSet.Contains(item))
+                        continue;
+
+                    if (writeIndex != readIndex)
+                        result[writeIndex] = item;
+
+                    writeIndex++;
+                }
+
+                if (writeIndex < result.Count)
+                    result.RemoveRange(writeIndex, result.Count - writeIndex);
+            }
+
+            private static void ApplyFilterAndFlexiblePrices(List<Trader.TradeItem> result)
+            {
+                if (result == null || result.Count == 0)
+                    return;
+
+                float factor = TraderCoins.GetPriceFactor(buyPrice: true);
+
+                string filterText = traderFilter?.text;
+                bool filterEnabled = !string.IsNullOrWhiteSpace(filterText);
+
+                for (int i = result.Count - 1; i >= 0; i--)
+                {
+                    Trader.TradeItem tradeItem = result[i];
+
+                    if (tradeItem == null || !ItemIsValid(tradeItem.m_prefab))
+                    {
+                        result.RemoveAt(i);
+                        continue;
+                    }
+
+                    if (filterEnabled)
+                    {
+                        string itemName = Localization.instance.Localize(tradeItem.m_prefab.m_itemData.m_shared.m_name);
+
+                        if (itemName.IndexOf(filterText, StringComparison.OrdinalIgnoreCase) < 0)
+                        {
+                            result.RemoveAt(i);
+                            continue;
+                        }
+                    }
+
+                    if (traderUseFlexiblePricing.Value)
+                    {
+                        tradeItem = CloneTradeItem(tradeItem);
+
+                        tradeItem.m_price = Math.Max((int)(tradeItem.m_price * factor), 1);
+                        TradeableItem.NormalizeStack(tradeItem);
+
+                        result[i] = tradeItem;
+                    }
+                }
+            }
+
+            private static Trader.TradeItem CloneTradeItem(Trader.TradeItem item)
+            {
+                return new Trader.TradeItem()
+                {
+                    m_prefab = item.m_prefab,
+                    m_stack = item.m_stack,
+                    m_price = item.m_price,
+                    m_requiredGlobalKey = item.m_requiredGlobalKey
+                };
             }
         }
 
@@ -689,8 +803,6 @@ namespace TradersExtended
         {
             private static void Postfix(StoreGui __instance)
             {
-                if (!modEnabled.Value) return;
-
                 UpdateSellButton();
 
                 RepairPanel.Update(__instance);
@@ -702,9 +814,6 @@ namespace TradersExtended
         {
             private static void Postfix(StoreGui __instance)
             {
-                if (!modEnabled.Value)
-                    return;
-
                 if (!IsOpen())
                     return;
 
@@ -747,9 +856,6 @@ namespace TradersExtended
         {
             private static bool Prefix(Trader ___m_trader, float ___m_hideDistance)
             {
-                if (!modEnabled.Value)
-                    return true;
-
                 if (Vector3.Distance(___m_trader.transform.position, Player.m_localPlayer.transform.position) > ___m_hideDistance)
                     return true;
 
@@ -761,9 +867,6 @@ namespace TradersExtended
 
             private static void Postfix()
             {
-                if (!modEnabled.Value)
-                    return;
-
                 // In case hiding was stopped
                 if (IsOpen())
                     return;
@@ -779,9 +882,6 @@ namespace TradersExtended
         {
             private static bool Prefix(StoreGui __instance, List<GameObject> ___m_itemList)
             {
-                if (!modEnabled.Value)
-                    return true;
-
                 if (AmountDialog.IsOpen() || Console.IsVisible())
                     return false;
 
@@ -853,9 +953,6 @@ namespace TradersExtended
         {
             private static bool Prefix(StoreGui __instance)
             {
-                if (!modEnabled.Value)
-                    return true;
-
                 if (!AmountDialog.IsOpen())
                     SellSelectedItem(__instance);
 
@@ -868,9 +965,6 @@ namespace TradersExtended
         {
             private static bool Prefix(ref int __result, List<GameObject> ___m_itemList)
             {
-                if (!modEnabled.Value)
-                    return true;
-
                 __result = -1;
                 for (int i = 0; i < ___m_itemList.Count; i++)
                     if (___m_itemList[i].transform.Find("selected").gameObject.activeSelf)
@@ -888,9 +982,6 @@ namespace TradersExtended
         {
             private static void Postfix(ref bool __result)
             {
-                if (!modEnabled.Value)
-                    return;
-
                 if (playerFilter != null && traderFilter != null && StoreGui.IsVisible())
                     __result = __result || playerFilter.isFocused || traderFilter.isFocused;
             }
@@ -901,9 +992,6 @@ namespace TradersExtended
         {
             private static void Prefix(StoreGui __instance, ref int index, ref bool center)
             {
-                if (!modEnabled.Value)
-                    return;
-
                 if (index >= 0)
                 {
                     if (__instance.m_itemList.Count == 0)
@@ -929,9 +1017,6 @@ namespace TradersExtended
 
             public static bool Prefix(StoreGui __instance)
             {
-                if (!modEnabled.Value)
-                    return true;
-
                 int playerCoins = __instance.GetPlayerCoins();
                 int num = __instance.GetSelectedItemIndex();
                 
@@ -1033,9 +1118,6 @@ namespace TradersExtended
             [HarmonyPriority(Priority.First)]
             public static bool Prefix(StoreGui __instance, ref Tuple<int, int> __state)
             {
-                if (!modEnabled.Value)
-                    return true;
-
                 isCalled = true;
 
                 if (__instance.m_selectedItem != null && __instance.CanAfford(__instance.m_selectedItem))
@@ -1072,9 +1154,6 @@ namespace TradersExtended
         {
             private static void Prefix(ItemDrop.ItemData item, ref int amount)
             {
-                if (!modEnabled.Value)
-                    return;
-
                 if (StoreGui.instance != null && StoreGui_BuySelectedItem_TraderCoinsUpdate.isCalled && StoreGui.instance.m_selectedItem != null && item == StoreGui.instance.m_selectedItem.m_prefab?.m_itemData)
                     amount = StoreGui.instance.m_selectedItem.m_stack;
             }

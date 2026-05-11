@@ -14,9 +14,6 @@ namespace TradersExtended
 
         public static void PatchCoinsItemData(ItemDrop.ItemData coins)
         {
-            if (!modEnabled.Value)
-                return;
-
             if (coins == null)
                 return;
 

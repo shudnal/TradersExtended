@@ -23,7 +23,7 @@ namespace TradersExtended
     {
         public const string pluginID = "shudnal.TradersExtended";
         public const string pluginName = "Traders Extended";
-        public const string pluginVersion = "1.3.12";
+        public const string pluginVersion = "1.3.13";
 
         private readonly Harmony harmony = new Harmony(pluginID);
 
@@ -33,7 +33,6 @@ namespace TradersExtended
 
         internal static TradersExtended instance;
 
-        public static ConfigEntry<bool> modEnabled;
         private static ConfigEntry<bool> loggingEnabled;
         private static ConfigEntry<bool> configLocked;
 
@@ -62,6 +61,7 @@ namespace TradersExtended
 
         public static ConfigEntry<string> tradersCustomPrefabs;
         public static ConfigEntry<bool> disableVanillaItems;
+        public static ConfigEntry<bool> disableOtherModsItems;
         public static ConfigEntry<float> qualityMultiplier;
         public static ConfigEntry<bool> hideEquippedAndHotbarItems;
         public static ConfigEntry<bool> addCommonValuableItemsToSellList;
@@ -134,7 +134,6 @@ namespace TradersExtended
         private void ConfigInit()
         {
             config("General", "NexusID", 2509, "Nexus mod ID for updates", false);
-            modEnabled = config("General", "Enabled", defaultValue: true, "Enable this mod. Reload the game to take effect.");
             configLocked = config("General", "Lock Configuration", defaultValue: true, "Configuration is locked and can be changed by server admins only.");
             loggingEnabled = config("General", "Logging enabled", defaultValue: false, "Enable logging. [Not Synced with Server]", false);
 
@@ -173,6 +172,7 @@ namespace TradersExtended
             hideEquippedAndHotbarItems = config("Misc", "Hide equipped and hotbar items", defaultValue: true, "Equippable items from first row of inventory and all items currently equipped will not be shown at the sell list.");
             addCommonValuableItemsToSellList = config("Misc", "Add common valuable items to sell list", defaultValue: true, "Add common valuable items to all traders sell list.");
             fixedStoreGuiPosition = config("Misc", "Fixed position for Store GUI", defaultValue: Vector2.zero, "If set then Store GUI will take that absolute position.");
+            disableOtherModsItems = config("Misc", "Disable other mods items", defaultValue: false, "Disable items from every other mod. Custom traders could or could not work depending on their implementation.");
 
             addCommonValuableItemsToSellList.SettingChanged += (sender, args) => StartConfigLoad();
             fixedStoreGuiPosition.SettingChanged += (sender, args) => StorePanel.SetStoreGuiPosition();

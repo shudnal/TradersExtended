@@ -139,9 +139,6 @@ namespace TradersExtended
             [HarmonyPriority(Priority.Last)]
             private static void Postfix(List<Recipe> ___m_recipes)
             {
-                if (!modEnabled.Value)
-                    return;
-
                 foreach (Recipe _recipe in ___m_recipes)
                     if (_recipe.m_craftingStation?.name == s_stationEffectName && _recipe.m_craftingStation.m_repairItemDoneEffects != null)
                     {
