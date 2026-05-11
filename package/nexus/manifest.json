@@ -1,9 +1,10 @@
 {
-    "name":  "TradersExtended",
-    "description":  "More compatibility with other mods. New config option to remove other mods items.",
-    "version":  "1.3.13",
-    "file_category":  "main",
-    "allow_mod_manager_download":  true,
-    "show_requirements_pop_up":  false,
-    "archive_existing_file":  true
+    "name": "TradersExtended",
+    "description": "More compatibility with other mods. New config option to remove other mods items.",
+    "version": "1.3.13",
+    "file_category": "main",
+    "allow_mod_manager_download": true,
+    "show_requirements_pop_up": false,
+    "archive_existing_file": false,
+    "primary_mod_manager_download": true
 }
