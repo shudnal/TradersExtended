@@ -10,6 +10,7 @@
     <RootNamespace>TradersExtended</RootNamespace>
     <AssemblyName>TradersExtended</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <LangVersion>11</LangVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
     <NuGetPackageImportStamp>
@@ -61,17 +62,19 @@
     </Reference>
     <Reference Include="ExtraSlotsAPI, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\Assemblies\API\ExtraSlotsAPI.dll</HintPath>
+      <HintPath>Libs\ExtraSlotsAPI.dll</HintPath>
     </Reference>
     <Reference Include="gui_framework, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\Assemblies\stable\gui_framework.dll</HintPath>
     </Reference>
-    <Reference Include="ServerSync, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="ConditionalConfigSync, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>Libs\ServerSync.dll</HintPath>
+      <HintPath>..\Assemblies\Managers\ConditionalConfigSync.dll</HintPath>
+      <Private>False</Private>
     </Reference>
     <Reference Include="System" />
+    <Reference Include="System.Core" />
     <Reference Include="Unity.TextMeshPro, Version=0.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>F:\Steam\steamapps\common\Valheim\valheim_Data\Managed\Unity.TextMeshPro.dll</HintPath>
@@ -95,11 +98,16 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AmountDialog.cs" />
+    <Compile Include="BuybackManager.cs" />
     <Compile Include="CoinsPatches.cs" />
+    <Compile Include="Compatibility\EpicLootCompat.cs" />
     <Compile Include="StorePanel.cs" />
     <Compile Include="RepairPanel.cs" />
     <Compile Include="TradeableItem.cs" />
     <Compile Include="TraderCoins.cs" />
+    <Compile Include="TraderCurrency.cs" />
+    <Compile Include="TooltipPrices.cs" />
+    <Compile Include="TraderConfig.cs" />
     <Compile Include="TradersExtended.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
@@ -115,6 +123,10 @@
     <None Include="ILRepack.targets" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Configs\**\*.json" />
+    <EmbeddedResource Include="Configs\**\*.yaml" />
+    <EmbeddedResource Include="Configs\**\*.yml" />
+    <EmbeddedResource Include="Configs\**\*.csv" />
     <Folder Include="Configs\" />
   </ItemGroup>
   <ItemGroup>
@@ -123,6 +135,9 @@
     </PackageReference>
     <PackageReference Include="Newtonsoft.Json">
       <Version>13.0.3</Version>
+    </PackageReference>
+    <PackageReference Include="YamlDotNet">
+      <Version>18.1.0</Version>
     </PackageReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

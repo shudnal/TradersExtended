@@ -10,7 +10,7 @@ namespace TradersExtended
         public const string itemNameCoins = "Coins";
         public const string itemDropNameCoins = "$item_coins";
 
-        private static List<ItemDrop.ItemData> _itemDataList = new List<ItemDrop.ItemData>();
+        private static readonly List<ItemDrop.ItemData> _itemDataList = new List<ItemDrop.ItemData>();
 
         public static void PatchCoinsItemData(ItemDrop.ItemData coins)
         {
@@ -21,7 +21,7 @@ namespace TradersExtended
                 return;
 
             coins.m_shared.m_weight = coinsWeight.Value;
-            coins.m_shared.m_maxStackSize = coinsStackSize.Value;
+            coins.m_shared.m_maxStackSize = System.Math.Max(coinsStackSize.Value, 1);
         }
 
         public static void PatchCoinsInInventory(Inventory inventory)
@@ -70,7 +70,7 @@ namespace TradersExtended
         {
             private static void Postfix(ref ItemDrop.ItemData item)
             {
-                if (item.m_shared.m_name != itemDropNameCoins)
+                if (item == null || item.m_shared.m_name != itemDropNameCoins)
                     return;
 
                 PatchCoinsItemData(item);
@@ -104,7 +104,7 @@ namespace TradersExtended
             [HarmonyPriority(Priority.First)]
             private static void Prefix(ItemDrop.ItemData item)
             {
-                if (item.m_shared.m_name != itemDropNameCoins)
+                if (item == null || item.m_shared.m_name != itemDropNameCoins)
                     return;
 
                 PatchCoinsItemData(item);

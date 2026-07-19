@@ -1,7 +1,9 @@
-﻿using UnityEngine;
+﻿using BepInEx;
+using Newtonsoft.Json;
 using System;
-using BepInEx;
 using System.Linq;
+using UnityEngine;
+using YamlDotNet.Serialization;
 
 namespace TradersExtended
 {
@@ -12,50 +14,72 @@ namespace TradersExtended
         {
             public const int qualityStackMultiplier = 1000000;
 
-            public string prefab;
-            public int stack = 1;
-            public int price = 1;
-            public int quality = 0;
-            public string requiredGlobalKey = "";
-            public string notRequiredGlobalKey = "";
-            public string requiredPlayerKey = "";
-            public string notRequiredPlayerKey = "";
+            public string prefab { get; set; }
+            public int stack { get; set; } = 1;
+            public int price { get; set; } = 1;
+            public int quality { get; set; }
+            public string currency { get; set; } = string.Empty;
+            public string requiredGlobalKey { get; set; } = string.Empty;
+            public string notRequiredGlobalKey { get; set; } = string.Empty;
+            public string requiredPlayerKey { get; set; } = string.Empty;
+            public string notRequiredPlayerKey { get; set; } = string.Empty;
 
             [NonSerialized]
+            [JsonIgnore]
+            [YamlIgnore]
             public ItemDrop itemDrop;
 
-            public bool IsItemToSell()
+            [NonSerialized]
+            [JsonIgnore]
+            [YamlIgnore]
+            public bool automatic;
+
+            public bool RequirementsMet()
             {
-                if (!ZoneSystem.instance || !ObjectDB.instance || !Player.m_localPlayer)
+                if (ZoneSystem.instance == null || Player.m_localPlayer == null)
                     return false;
 
-                if (!string.IsNullOrEmpty(requiredGlobalKey) && requiredGlobalKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => !ZoneSystem.instance.GetGlobalKey(s)))
+                if (!string.IsNullOrEmpty(requiredGlobalKey) && requiredGlobalKey.Split(',').Select(value => value.Trim()).Where(value => !value.IsNullOrWhiteSpace()).Any(value => !ZoneSystem.instance.GetGlobalKey(value)))
                     return false;
 
-                if (!string.IsNullOrEmpty(notRequiredGlobalKey) && notRequiredGlobalKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => ZoneSystem.instance.GetGlobalKey(s)))
+                if (!string.IsNullOrEmpty(notRequiredGlobalKey) && notRequiredGlobalKey.Split(',').Select(value => value.Trim()).Where(value => !value.IsNullOrWhiteSpace()).Any(value => ZoneSystem.instance.GetGlobalKey(value)))
                     return false;
 
-                if (!string.IsNullOrEmpty(requiredPlayerKey) && requiredPlayerKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => !Player.m_localPlayer.HaveUniqueKey(s)))
+                if (!string.IsNullOrEmpty(requiredPlayerKey) && requiredPlayerKey.Split(',').Select(value => value.Trim()).Where(value => !value.IsNullOrWhiteSpace()).Any(value => !Player.m_localPlayer.HaveUniqueKey(value)))
                     return false;
 
-                if (!string.IsNullOrEmpty(notRequiredPlayerKey) && notRequiredPlayerKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => Player.m_localPlayer.HaveUniqueKey(s)))
+                if (!string.IsNullOrEmpty(notRequiredPlayerKey) && notRequiredPlayerKey.Split(',').Select(value => value.Trim()).Where(value => !value.IsNullOrWhiteSpace()).Any(value => Player.m_localPlayer.HaveUniqueKey(value)))
+                    return false;
+
+                return true;
+            }
+
+            public bool IsItemToSell(Trader trader)
+            {
+                if (ObjectDB.instance == null || !RequirementsMet() || string.IsNullOrWhiteSpace(prefab) || stack <= 0 || price <= 0)
                     return false;
 
                 GameObject itemPrefab = ObjectDB.instance.GetItemPrefab(prefab);
-
                 if (itemPrefab == null || !itemPrefab.TryGetComponent(out itemDrop))
                     return false;
 
-                return !checkForDiscovery.Value || IgnoreItemDiscovery(prefab.ToLower()) || Player.m_localPlayer.IsMaterialKnown(itemDrop.m_itemData.m_shared.m_name);
+                ResolvedTraderConfig config = TraderConfigManager.Get(trader);
+                return !config.SellOnlyDiscoveredItems ||
+                       TraderConfigManager.IgnoreItemDiscovery(trader, prefab) ||
+                       Player.m_localPlayer.IsMaterialKnown(itemDrop.m_itemData.m_shared.m_name);
             }
 
             public Trader.TradeItem ToTradeItem()
             {
-                if (itemDrop == null)
+                if (itemDrop == null && ObjectDB.instance != null && !string.IsNullOrWhiteSpace(prefab))
                 {
                     GameObject itemPrefab = ObjectDB.instance.GetItemPrefab(prefab);
-                    itemDrop = itemPrefab.GetComponent<ItemDrop>();
+                    if (itemPrefab != null)
+                        itemDrop = itemPrefab.GetComponent<ItemDrop>();
                 }
+
+                if (itemDrop == null)
+                    return null;
 
                 return new Trader.TradeItem
                 {
@@ -68,14 +92,17 @@ namespace TradersExtended
 
             public static void NormalizeStack(Trader.TradeItem item)
             {
+                if (item == null || item.m_prefab == null)
+                    return;
+
                 GetStackQualityFromStack(item.m_stack, out int stack, out int quality);
                 item.m_stack = GetStackFromStackQuality(Mathf.Clamp(stack, 1, item.m_prefab.m_itemData.m_shared.m_maxStackSize), quality);
             }
 
-            public static void GetStackQualityFromStack(int m_stack, out int stack, out int quality)
+            public static void GetStackQualityFromStack(int encodedStack, out int stack, out int quality)
             {
-                stack = m_stack % qualityStackMultiplier;
-                quality = m_stack / qualityStackMultiplier;
+                stack = encodedStack % qualityStackMultiplier;
+                quality = encodedStack / qualityStackMultiplier;
             }
 
             public static int GetStackFromStackQuality(int stack, int quality)
@@ -83,9 +110,9 @@ namespace TradersExtended
                 return stack + qualityStackMultiplier * quality;
             }
 
-            public static int GetStackFromStack(int m_stack)
+            public static int GetStackFromStack(int encodedStack)
             {
-                return m_stack % qualityStackMultiplier;
+                return encodedStack % qualityStackMultiplier;
             }
         }
     }

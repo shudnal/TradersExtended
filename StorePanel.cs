@@ -4,10 +4,10 @@ using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using TradersExtended.Compatibility;
 using static TradersExtended.TradersExtended;
 
 namespace TradersExtended
@@ -32,6 +32,7 @@ namespace TradersExtended
             public int amount;
             public int quality;
             public int pricePerItem;
+            public ItemDrop currency;
 
             public ItemToSell Clone()
             {
@@ -52,7 +53,14 @@ namespace TradersExtended
             }
         }
 
+        private sealed class SellPrice
+        {
+            internal int Price;
+            internal string CurrencyPrefab;
+        }
+
         private const float positionDelta = 35f;
+        private const string nonTeleportableIconName = "TradersExtended_NonTeleportable";
 
         private static GameObject sellPanel;
         private static Button sellButton;
@@ -70,17 +78,17 @@ namespace TradersExtended
 
         internal static readonly List<GameObject> sellItemList = new List<GameObject>();
         internal static readonly List<ItemToSell> tempItems = new List<ItemToSell>();
-        internal static readonly Dictionary<string, Dictionary<int, int>> tempItemsPrice = new Dictionary<string, Dictionary<int, int>>();
+        private static readonly Dictionary<string, Dictionary<int, SellPrice>> tempItemsPrice = new Dictionary<string, Dictionary<int, SellPrice>>();
 
         internal static ItemToSell selectedItem;
         private static int selectedItemIndex = -1;
 
         private static ItemToSell buybackItem;
 
-        private static Func<bool> _adventureModeEnabled;
         private static Vector3 defaultStorePosition;
 
-        public static bool AdventureModeEnabled(Trader trader) => _adventureModeEnabled != null && Utils.GetPrefabName(trader.gameObject) == "Haldor" && _adventureModeEnabled();
+        public static bool AdventureModeEnabled(Trader trader) =>
+            trader != null && TraderConfigManager.Get(trader).ShiftStoreGuiForEpicLoot && EpicLootCompat.IsAdventureModeEnabled();
 
         public static bool IsOpen() => sellPanel != null && sellPanel.gameObject.activeInHierarchy;
 
@@ -132,96 +140,141 @@ namespace TradersExtended
             }
         }
 
-        public static void SellSelectedItem(StoreGui __instance)
+        public static void SellSelectedItem(StoreGui storeGui)
         {
-            ItemDrop m_coinPrefab = __instance.m_coinPrefab;
-            if (m_coinPrefab == null)
+            if (selectedItem == null || Player.m_localPlayer == null)
+                return;
+
+            ItemDrop currency = selectedItem.currency ?? storeGui?.m_coinPrefab;
+            if (currency == null)
             {
-                logger.LogWarning($"No m_coinPrefab set in StoreGui");
+                logger.LogWarning("No currency prefab is available for the selected sell item");
                 return;
             }
-
-            if (selectedItem == null)
-                return;
 
             selectedItemIndex = GetSelectedItemIndex();
 
-            if (enableBuyBack.Value)
-                buybackItem = selectedItem.Clone();
-
-            if (selectedItem.itemType == ItemToSell.ItemType.Single)
-                Player.m_localPlayer.GetInventory().RemoveItem(selectedItem.item);
-            else if (selectedItem.itemType == ItemToSell.ItemType.Stack)
-                Player.m_localPlayer.GetInventory().RemoveItem(selectedItem.item.m_shared.m_name, selectedItem.stack, selectedItem.quality == 0 ? -1 : selectedItem.quality);
-            else if (selectedItem.itemType == ItemToSell.ItemType.Combined)
-                Player.m_localPlayer.GetInventory().RemoveItem(selectedItem.item.m_shared.m_name, selectedItem.amount, selectedItem.quality == 0 ? -1 : selectedItem.quality);
-
-            int coins = Player.m_localPlayer.GetInventory().CountItems(m_coinPrefab.m_itemData.m_shared.m_name);
-            if (Player.m_localPlayer.GetInventory().AddItem(m_coinPrefab.gameObject.name, selectedItem.price, m_coinPrefab.m_itemData.m_quality, m_coinPrefab.m_itemData.m_variant, 0L, "") == null)
+            Inventory inventory = Player.m_localPlayer.GetInventory();
+            int quality = selectedItem.quality == 0 ? -1 : selectedItem.quality;
+            int amountToRemove = selectedItem.itemType == ItemToSell.ItemType.Stack
+                ? selectedItem.stack
+                : selectedItem.itemType == ItemToSell.ItemType.Combined
+                    ? selectedItem.amount
+                    : selectedItem.item.m_stack;
+            bool canRemove = selectedItem.itemType == ItemToSell.ItemType.Single
+                ? inventory.ContainsItem(selectedItem.item)
+                : inventory.CountItems(selectedItem.item.m_shared.m_name, quality) >= amountToRemove;
+            if (!canRemove)
             {
-                int spawnCoins = selectedItem.price + coins - Player.m_localPlayer.GetInventory().CountItems(m_coinPrefab.m_itemData.m_shared.m_name);
-                int count = spawnCoins / m_coinPrefab.m_itemData.m_shared.m_maxStackSize;
-                
-                GameObject coinPrefab = ZNetScene.instance.GetPrefab(m_coinPrefab.gameObject.name);
-                if (coinPrefab)
+                storeGui.FillList();
+                return;
+            }
+
+            ItemToSell pendingBuyback = TraderConfigManager.Get(storeGui.m_trader).EnableBuybackForLastItemSold
+                ? selectedItem.Clone()
+                : null;
+            ItemDrop originalCurrency = storeGui.m_coinPrefab;
+            storeGui.m_coinPrefab = currency;
+            try
+            {
+                using (TraderCoins.BeginBalanceTransaction(TraderCoins.BalanceOperation.Receive))
                 {
-                    Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, "$msg_dropped: $item_coins x" + spawnCoins);
-                    while (spawnCoins > 0)
+                    if (selectedItem.itemType == ItemToSell.ItemType.Single)
                     {
-                        Vector3 vector = UnityEngine.Random.insideUnitSphere * ((count == 1) ? 0f : 0.5f);
-                        GameObject gameObject = UnityEngine.Object.Instantiate(coinPrefab, Player.m_localPlayer.transform.position + Player.m_localPlayer.transform.forward * 2f + Vector3.up + vector, Quaternion.identity);
-                        ItemDrop coinDrop = gameObject.GetComponent<ItemDrop>();
-                        coinDrop.m_itemData.m_stack = Mathf.Min(spawnCoins, coinDrop.m_itemData.m_shared.m_maxStackSize);
-                        spawnCoins -= coinDrop.m_itemData.m_stack;
+                        if (!inventory.RemoveItem(selectedItem.item))
+                            return;
                     }
+                    else
+                    {
+                        inventory.RemoveItem(selectedItem.item.m_shared.m_name, amountToRemove, quality);
+                    }
+
+                    if (pendingBuyback != null)
+                    {
+                        buybackItem = pendingBuyback;
+                        BuybackManager.Set(storeGui.m_trader, pendingBuyback);
+                    }
+
+                    int currencyBefore = inventory.CountItems(currency.m_itemData.m_shared.m_name);
+                    if (inventory.AddItem(currency.gameObject.name, selectedItem.price, currency.m_itemData.m_quality, currency.m_itemData.m_variant, 0L, "") == null)
+                    {
+                        int remainingCurrency = selectedItem.price + currencyBefore - inventory.CountItems(currency.m_itemData.m_shared.m_name);
+                        int maximumStackSize = Math.Max(currency.m_itemData.m_shared.m_maxStackSize, 1);
+                        int stackCount = Mathf.CeilToInt((float)remainingCurrency / maximumStackSize);
+
+                        GameObject currencyPrefab = ZNetScene.instance != null ? ZNetScene.instance.GetPrefab(currency.gameObject.name) : null;
+                        if (currencyPrefab == null)
+                            currencyPrefab = currency.gameObject;
+
+                        if (currencyPrefab != null && remainingCurrency > 0)
+                        {
+                            TraderCoins.UpdateTraderCoins(-remainingCurrency);
+                            string currencyName = TraderCurrency.GetCurrencyName(currency);
+                            Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, $"$msg_dropped: {currencyName} x{remainingCurrency}");
+                            while (remainingCurrency > 0)
+                            {
+                                Vector3 offset = UnityEngine.Random.insideUnitSphere * (stackCount == 1 ? 0f : 0.5f);
+                                GameObject droppedObject = UnityEngine.Object.Instantiate(
+                                    currencyPrefab,
+                                    Player.m_localPlayer.transform.position + Player.m_localPlayer.transform.forward * 2f + Vector3.up + offset,
+                                    Quaternion.identity);
+                                ItemDrop droppedCurrency = droppedObject.GetComponent<ItemDrop>();
+                                droppedCurrency.m_itemData.m_stack = Mathf.Min(remainingCurrency, maximumStackSize);
+                                remainingCurrency -= droppedCurrency.m_itemData.m_stack;
+                            }
+                        }
+                    }
+
+                    string itemText = amountToRemove <= 1
+                        ? selectedItem.item.m_shared.m_name
+                        : $"{amountToRemove}x{selectedItem.item.m_shared.m_name}";
+
+                    storeGui.m_sellEffects.Create(storeGui.transform.position, Quaternion.identity);
+                    string soldMessage = Localization.instance.Localize("$msg_sold", itemText, selectedItem.price.ToString());
+                    if (currency.m_itemData.m_shared.m_name != CoinsPatches.itemDropNameCoins)
+                        soldMessage = $"{Localization.instance.Localize(itemText)}: {selectedItem.price} {TraderCurrency.GetCurrencyName(currency)}";
+                    Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, soldMessage, 0, selectedItem.item.GetIcon());
+                    storeGui.m_trader.OnSold();
+                    Gogan.LogEvent("Game", "SoldItem", itemText, 0L);
                 }
             }
-            
-            string text = selectedItem.stack <= 1 ? selectedItem.item.m_shared.m_name : $"{selectedItem.stack}x{selectedItem.item.m_shared.m_name}";
+            finally
+            {
+                storeGui.m_coinPrefab = originalCurrency;
+            }
 
-            __instance.m_sellEffects.Create(__instance.transform.position, Quaternion.identity);
-            Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, Localization.instance.Localize("$msg_sold", text, selectedItem.price.ToString()), 0, selectedItem.item.GetIcon());
-            __instance.m_trader.OnSold();
-            Gogan.LogEvent("Game", "SoldItem", text, 0L);
-
-            __instance.FillList();
+            storeGui.FillList();
         }
 
         private static void AddItemToSellList(TradeableItem item)
         {
-            if (item.price == 0 || item.stack == 0)
-                return;
-
-            if (!string.IsNullOrEmpty(item.requiredGlobalKey) && item.requiredGlobalKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => !ZoneSystem.instance.GetGlobalKey(s)))
-                return;
-
-            if (!string.IsNullOrEmpty(item.notRequiredGlobalKey) && item.notRequiredGlobalKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => ZoneSystem.instance.GetGlobalKey(s)))
-                return;
-
-            if (!string.IsNullOrEmpty(item.requiredPlayerKey) && item.requiredPlayerKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => !Player.m_localPlayer.HaveUniqueKey(s)))
-                return;
-
-            if (!string.IsNullOrEmpty(item.notRequiredPlayerKey) && item.notRequiredPlayerKey.Split(',').Select(s => s.Trim()).Where(s => !s.IsNullOrWhiteSpace()).Any(s => Player.m_localPlayer.HaveUniqueKey(s)))
+            if (item == null || item.price <= 0 || item.stack <= 0 || !item.RequirementsMet())
                 return;
 
             if (!TryGetPriceKey(item, out string key))
                 return;
 
             if (!tempItemsPrice.ContainsKey(key))
-                tempItemsPrice[key] = new Dictionary<int, int>();
+                tempItemsPrice[key] = new Dictionary<int, SellPrice>();
 
-            tempItemsPrice[key][item.stack] = item.price;
+            tempItemsPrice[key][item.stack] = new SellPrice
+            {
+                Price = item.price,
+                CurrencyPrefab = item.currency
+            };
         }
 
         private static bool TryGetPriceKey(TradeableItem item, out string key)
         {
             key = "";
-
-            GameObject prefab = ObjectDB.instance.GetItemPrefab(item.prefab);
-            if (prefab == null)
+            if (item == null || ObjectDB.instance == null || string.IsNullOrWhiteSpace(item.prefab))
                 return false;
 
-            ItemDrop.ItemData itemData = prefab.GetComponent<ItemDrop>().m_itemData;
+            GameObject prefab = ObjectDB.instance.GetItemPrefab(item.prefab);
+            if (prefab == null || !prefab.TryGetComponent(out ItemDrop itemDrop))
+                return false;
+
+            ItemDrop.ItemData itemData = itemDrop.m_itemData;
             if (itemData.m_shared.m_maxStackSize == 1 && item.stack != 1)
                 return false;
 
@@ -235,25 +288,27 @@ namespace TradersExtended
             return quality > 0 ? itemData.m_shared.m_name + "-" + quality : itemData.m_shared.m_name;
         }
 
-        private static bool IgnoreItemForSell(ItemDrop.ItemData item)
+        private static bool IgnoreItemForSell(ItemDrop.ItemData item, Trader trader)
         {
-            if (item.m_shared.m_name == StoreGui.instance.m_coinPrefab.m_itemData.m_shared.m_name)
+            if (!string.IsNullOrWhiteSpace(playerFilter.text) && Localization.instance.Localize(item.m_shared.m_name).IndexOf(playerFilter.text, StringComparison.OrdinalIgnoreCase) < 0)
                 return true;
-            else if (!String.IsNullOrWhiteSpace(playerFilter.text) && Localization.instance.Localize(item.m_shared.m_name).ToLower().IndexOf(playerFilter.text.ToLower()) == -1)
+
+            if (!TraderConfigManager.Get(trader).HideEquippedAndHotbarItems)
+                return false;
+
+            if (item.m_equipped) // Ignore currently equipped item
                 return true;
-            else if (hideEquippedAndHotbarItems.Value && item.m_equipped) // Ignore currently equipped item
+            if (item.m_gridPos.y == 0 && item.IsEquipable()) // Ignore equippable item from first row (hotbar)
                 return true;
-            else if (hideEquippedAndHotbarItems.Value && item.m_gridPos.y == 0 && item.IsEquipable()) // Ignore equippable item from first row (hotbar)
+            if (AzuExtendedPlayerInventory.API.GetSlots().GetItemFuncs.Where(func => func != null).Select(func => func(Player.m_localPlayer)).Contains(item))
                 return true;
-            else if (hideEquippedAndHotbarItems.Value && AzuExtendedPlayerInventory.API.GetSlots().GetItemFuncs.Where(func => func != null).Select(func => func(Player.m_localPlayer)).Contains(item))
-                return true;
-            else if (hideEquippedAndHotbarItems.Value && ExtraSlots.API.GetAllExtraSlotsItems().Contains(item))
+            if (ExtraSlots.API.GetAllExtraSlotsItems().Contains(item))
                 return true;
 
             return false;
         }
 
-        private static Dictionary<int, int> GetStackPrices(ItemDrop.ItemData item, out int quality)
+        private static Dictionary<int, SellPrice> GetStackPrices(ItemDrop.ItemData item, out int quality)
         {
             quality = item.m_quality;
             string key = GetPriceKey(item, quality);
@@ -268,17 +323,32 @@ namespace TradersExtended
             return null;
         }
 
-        private static void AddToSellList(ItemDrop.ItemData item, int itemStack, int itemPrice, float priceFactor, int quality, ItemToSell.ItemType itemType)
+        internal static int CalculateSellPrice(int basePrice, int amount)
         {
-            int price = itemPrice;
+            return CalculateSellPrice(basePrice, amount, TraderCoins.GetPriceFactor(buyPrice: false));
+        }
 
-            if (itemType == ItemToSell.ItemType.Combined)
-                price *= itemStack;
+        private static int CalculateSellPrice(int basePrice, int amount, float priceFactor)
+        {
+            if (basePrice <= 0 || amount <= 0)
+                return 0;
 
-            if (itemType != ItemToSell.ItemType.Stack && qualityMultiplier.Value != 0 && quality == 0 && item.m_quality > 1)
-                price += (int)(qualityMultiplier.Value * price * (item.m_quality - 1));
+            double price = basePrice * (double)amount * priceFactor;
+            if (double.IsNaN(price) || price >= int.MaxValue)
+                return int.MaxValue;
 
-            price = Math.Max((int)(price * priceFactor), 1);
+            return Math.Max((int)Math.Ceiling(price), 1);
+        }
+
+        private static void AddToSellList(ItemDrop.ItemData item, int itemStack, int itemPrice, float priceFactor, int configuredQuality, ItemToSell.ItemType itemType, ItemDrop currency)
+        {
+            int effectiveQuality = configuredQuality > 0 ? configuredQuality : item.m_quality;
+            int adjustedItemPrice = itemPrice;
+            float configuredQualityMultiplier = TraderConfigManager.Get(StoreGui.instance?.m_trader).QualityMultiplier;
+            if (itemType != ItemToSell.ItemType.Stack && configuredQualityMultiplier != 0 && configuredQuality == 0 && item.m_quality > 1)
+                adjustedItemPrice += (int)(configuredQualityMultiplier * adjustedItemPrice * (item.m_quality - 1));
+
+            int price = CalculateSellPrice(adjustedItemPrice, itemType == ItemToSell.ItemType.Combined ? itemStack : 1, priceFactor);
 
             if (itemType == ItemToSell.ItemType.Single)
                 tempItems.Add(new ItemToSell()
@@ -287,15 +357,17 @@ namespace TradersExtended
                     item = item,
                     stack = itemStack,
                     price = price,
-                    quality = quality
+                    quality = effectiveQuality,
+                    currency = currency
                 });
             else if (itemType == ItemToSell.ItemType.Stack)
             {
-                ItemToSell currentStack = tempItems.Find(tmpItem => tmpItem.itemType == itemType && 
-                                                                    tmpItem.stack == itemStack && 
-                                                                    tmpItem.item.m_shared.m_name == item.m_shared.m_name && 
-                                                                    (quality == 0 || tmpItem.item.m_quality == quality) && 
-                                                                    tmpItem.price == price);
+                ItemToSell currentStack = tempItems.Find(tmpItem => tmpItem.itemType == itemType &&
+                                                                    tmpItem.stack == itemStack &&
+                                                                    tmpItem.item.m_shared.m_name == item.m_shared.m_name &&
+                                                                    tmpItem.quality == effectiveQuality &&
+                                                                    tmpItem.price == price &&
+                                                                    SameCurrency(tmpItem.currency, currency));
                 if (currentStack != null)
                     currentStack.amount += item.m_stack;
                 else
@@ -306,19 +378,22 @@ namespace TradersExtended
                         stack = itemStack,
                         price = price,
                         amount = item.m_stack,
-                        quality = quality
+                        quality = effectiveQuality,
+                        currency = currency
                     });
             }
             else if (itemType == ItemToSell.ItemType.Combined)
             {
-                ItemToSell currentStack = tempItems.Find(tmpItem => tmpItem.itemType == itemType && 
-                                                                    tmpItem.item.m_shared.m_name == item.m_shared.m_name && 
-                                                                    (quality == 0 || tmpItem.item.m_quality == quality) && 
-                                                                    tmpItem.stack == 1);
+                ItemToSell currentStack = tempItems.Find(tmpItem => tmpItem.itemType == itemType &&
+                                                                    tmpItem.item.m_shared.m_name == item.m_shared.m_name &&
+                                                                    tmpItem.quality == effectiveQuality &&
+                                                                    tmpItem.stack == 1 &&
+                                                                    tmpItem.pricePerItem == adjustedItemPrice &&
+                                                                    SameCurrency(tmpItem.currency, currency));
                 if (currentStack != null)
                 {
-                    currentStack.price += price;
                     currentStack.amount += itemStack;
+                    currentStack.price = CalculateSellPrice(currentStack.pricePerItem, currentStack.amount, priceFactor);
                 }
                 else
                 {
@@ -329,11 +404,22 @@ namespace TradersExtended
                         stack = 1,
                         price = price,
                         amount = itemStack,
-                        quality = quality,
-                        pricePerItem = itemPrice + (qualityMultiplier.Value != 0 && quality == 0 && item.m_quality > 1 ? (int)(qualityMultiplier.Value * itemPrice * (item.m_quality - 1)) : 0)
+                        quality = effectiveQuality,
+                        pricePerItem = adjustedItemPrice,
+                        currency = currency
                     });
                 }
             }
+        }
+
+        private static bool SameCurrency(ItemDrop first, ItemDrop second)
+        {
+            if (ReferenceEquals(first, second))
+                return true;
+            if (first == null || second == null)
+                return false;
+
+            return string.Equals(first.m_itemData.m_shared.m_name, second.m_itemData.m_shared.m_name, StringComparison.Ordinal);
         }
 
         public static void FillSellableList(StoreGui __instance)
@@ -346,31 +432,47 @@ namespace TradersExtended
             tempItems.Clear();
             tempItemsPrice.Clear();
 
+            if (sellableItems.TryGetValue(CommonListKey(ItemsListType.Sell), out List<TradeableItem> commonItems))
+            {
+                bool includeAutomaticItems = TraderConfigManager.IsAutomaticCommonItemEnabled(__instance.m_trader);
+                foreach (TradeableItem item in commonItems)
+                    if (!item.automatic || includeAutomaticItems)
+                        AddItemToSellList(item);
+            }
+
             if (sellableItems.ContainsKey(TraderListKey(__instance.m_trader, ItemsListType.Sell)))
                 sellableItems[TraderListKey(__instance.m_trader, ItemsListType.Sell)].ForEach(item => AddItemToSellList(item));
-
-            if (sellableItems.ContainsKey(CommonListKey(ItemsListType.Sell)))
-                sellableItems[CommonListKey(ItemsListType.Sell)].ForEach(item => AddItemToSellList(item));
 
             float priceFactor = TraderCoins.GetPriceFactor(buyPrice: false);
 
             foreach (ItemDrop.ItemData item in Player.m_localPlayer.GetInventory().GetAllItemsSortedByName())
             {
-                if (IgnoreItemForSell(item))
+                if (IgnoreItemForSell(item, __instance.m_trader))
                     continue;
 
-                Dictionary<int, int> stackPrices = GetStackPrices(item, out int quality);
+                Dictionary<int, SellPrice> stackPrices = GetStackPrices(item, out int quality);
                 if (stackPrices == null)
                     continue;
 
                 foreach (int stack in stackPrices.Keys.OrderBy(x => x))
+                {
+                    SellPrice sellPrice = stackPrices[stack];
+                    ItemDrop currency = TraderCurrency.GetCurrency(sellPrice.CurrencyPrefab, __instance);
+                    if (currency == null || string.Equals(item.m_shared.m_name, currency.m_itemData.m_shared.m_name, StringComparison.Ordinal))
+                        continue;
+
                     if (stack == 1)
+                    {
                         if (item.m_shared.m_maxStackSize == 1)
-                            AddToSellList(item, 1, stackPrices[stack], priceFactor, quality, ItemToSell.ItemType.Single);
+                            AddToSellList(item, 1, sellPrice.Price, priceFactor, quality, ItemToSell.ItemType.Single, currency);
                         else
-                            AddToSellList(item, item.m_stack, stackPrices[stack], priceFactor, quality, ItemToSell.ItemType.Combined);
+                            AddToSellList(item, item.m_stack, sellPrice.Price, priceFactor, quality, ItemToSell.ItemType.Combined, currency);
+                    }
                     else
-                        AddToSellList(item, stack, stackPrices[stack], priceFactor, quality, ItemToSell.ItemType.Stack);
+                    {
+                        AddToSellList(item, stack, sellPrice.Price, priceFactor, quality, ItemToSell.ItemType.Stack, currency);
+                    }
+                }
             }
 
             tempItems.RemoveAll(x => x.amount != 0 && x.amount < x.stack);
@@ -409,6 +511,7 @@ namespace TradersExtended
                 TMP_Text component2 = element.transform.Find("name").GetComponent<TMP_Text>();
                 component2.SetText(text);
                 element.GetComponent<UITooltip>().Set(tradeItem.item.m_shared.m_name, tradeItem.item.GetTooltip(), tooltipAnchor);
+                SetCurrencyIcon(element, tradeItem.currency ?? __instance.m_coinPrefab);
                 TMP_Text component3 = element.transform.Find("coin_bkg").Find("price").GetComponent<TMP_Text>();
                 component3.SetText(tradeItem.price.ToString());
                 if (!canSell)
@@ -438,20 +541,38 @@ namespace TradersExtended
             if (!ItemToSell.IsBuyBackItem(store.m_selectedItem))
                 return false;
 
+            buybackItem = BuybackManager.Get(store.m_trader);
+            if (buybackItem == null)
+            {
+                store.m_selectedItem = null;
+                store.FillList();
+                return false;
+            }
+
+            Inventory inventory = Player.m_localPlayer.GetInventory();
             bool result;
             if (buybackItem.itemType == ItemToSell.ItemType.Single)
-                result = Player.m_localPlayer.GetInventory().AddItem(buybackItem.item);
+            {
+                if (!inventory.CanAddItem(buybackItem.item, buybackItem.item.m_stack))
+                    return false;
+
+                result = inventory.AddItem(buybackItem.item);
+            }
             else
             {
                 int variant = buybackItem.item.m_variant;
                 int quality = buybackItem.quality == 0 ? buybackItem.item.m_quality : buybackItem.quality;
                 int stack = buybackItem.itemType == ItemToSell.ItemType.Stack ? buybackItem.stack : buybackItem.amount;
-                result = Player.m_localPlayer.GetInventory().AddItem(buybackItem.item.m_dropPrefab?.name, stack, quality, variant, buybackItem.item.m_crafterID, buybackItem.item.m_crafterName, buybackItem.item.m_pickedUp) != null;
+                if (buybackItem.item.m_dropPrefab == null || !inventory.CanAddItem(buybackItem.item, stack))
+                    return false;
+
+                result = inventory.AddItem(buybackItem.item.m_dropPrefab.name, stack, quality, variant, buybackItem.item.m_crafterID, buybackItem.item.m_crafterName, buybackItem.item.m_pickedUp) != null;
             }
                 
             if (result)
             {
                 buybackItem = null;
+                BuybackManager.Remove(store.m_trader);
                 Player.m_localPlayer.GetInventory().RemoveItem(StoreGui.instance.m_coinPrefab.m_itemData.m_shared.m_name, store.m_selectedItem.m_price);
                 store.m_selectedItem = null;
                 StoreGui.instance.m_buyEffects.Create(StoreGui.instance.transform.position, Quaternion.identity);
@@ -459,6 +580,94 @@ namespace TradersExtended
             }
 
             return result;
+        }
+
+        internal static void UpdateCurrencyVisuals(StoreGui storeGui)
+        {
+            if (storeGui == null || storeGui.m_coinPrefab == null)
+                return;
+
+            SetCurrencyIcon(storeGui.m_rootPanel, storeGui.m_coinPrefab);
+            SetCurrencyIcon(sellPanel, storeGui.m_coinPrefab);
+            AmountDialog.UpdateCurrencyIcon(storeGui.m_coinPrefab);
+        }
+
+        private static void SetCurrencyIcon(GameObject root, ItemDrop currency)
+        {
+            if (root == null || currency == null)
+                return;
+
+            Image[] images = root.GetComponentsInChildren<Image>(true);
+            foreach (Image image in images)
+            {
+                if (image == null)
+                    continue;
+
+                string objectName = image.gameObject.name;
+                if (objectName.IndexOf("coin", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    objectName.IndexOf("bkg", StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    image.sprite = currency.m_itemData.GetIcon();
+                }
+            }
+        }
+
+        private static void InitializeNonTeleportableIcon(GameObject itemTemplate)
+        {
+            if (itemTemplate == null || itemTemplate.transform.Find(nonTeleportableIconName) != null || InventoryGui.instance == null)
+                return;
+
+            GameObject inventoryElement = InventoryGui.instance.m_playerGrid?.m_elementPrefab;
+            if (inventoryElement == null)
+                return;
+
+            Transform source = inventoryElement.transform.Find("noteleport") ?? inventoryElement.GetComponentsInChildren<Transform>(true)
+                .FirstOrDefault(child => child != null && child.name.IndexOf("teleport", StringComparison.OrdinalIgnoreCase) >= 0);
+            if (source == null)
+                return;
+
+            GameObject icon = UnityEngine.Object.Instantiate(source.gameObject, itemTemplate.transform);
+            icon.name = nonTeleportableIconName;
+            icon.SetActive(true);
+
+            RectTransform rectTransform = icon.GetComponent<RectTransform>();
+            if (rectTransform != null)
+            {
+                rectTransform.anchorMin = new Vector2(0f, 1f);
+                rectTransform.anchorMax = new Vector2(0f, 1f);
+                rectTransform.pivot = new Vector2(0f, 1f);
+                rectTransform.anchoredPosition = new Vector2(4f, -4f);
+                rectTransform.localScale = Vector3.one;
+            }
+
+            Image image = icon.GetComponent<Image>();
+            if (image != null)
+            {
+                image.enabled = false;
+                image.raycastTarget = false;
+            }
+            else
+            {
+                icon.SetActive(false);
+            }
+        }
+
+        private static void SetNonTeleportableIcon(GameObject element, bool visible)
+        {
+            Transform icon = element != null ? element.transform.Find(nonTeleportableIconName) : null;
+            if (icon == null)
+                return;
+
+            Image image = icon.GetComponent<Image>();
+            if (image != null)
+            {
+                icon.gameObject.SetActive(true);
+                image.enabled = visible;
+            }
+            else
+            {
+                icon.gameObject.SetActive(visible);
+            }
         }
 
         public static void SetStoreGuiPosition()
@@ -469,11 +678,12 @@ namespace TradersExtended
             if (defaultStorePosition == Vector3.zero)
                 defaultStorePosition = StoreGui.instance.m_rootPanel.transform.localPosition;
 
-            if (fixedStoreGuiPosition.Value != Vector2.zero)
-                StoreGui.instance.m_rootPanel.transform.localPosition = fixedStoreGuiPosition.Value;
+            Vector2 configuredPosition = TraderConfigManager.Get(StoreGui.instance.m_trader).FixedStoreGuiPosition;
+            if (configuredPosition != Vector2.zero)
+                StoreGui.instance.m_rootPanel.transform.localPosition = configuredPosition;
             else
                 StoreGui.instance.m_rootPanel.transform.localPosition = AdventureModeEnabled(StoreGui.instance.m_trader)
-                                                                        ? defaultStorePosition - new Vector3(RepairPanel.TraderCanRepair(StoreGui.instance.m_trader) ? 146f : 100f, 0f, 0f) 
+                                                                        ? defaultStorePosition - new Vector3(RepairPanel.TraderCanRepair(StoreGui.instance.m_trader) ? 146f : 100f, 0f, 0f)
                                                                         : defaultStorePosition;
         }
 
@@ -503,6 +713,8 @@ namespace TradersExtended
             [HarmonyPriority(Priority.First)]
             static void Postfix(StoreGui __instance)
             {
+                TraderCurrency.CaptureVanillaCurrency(__instance);
+                InitializeNonTeleportableIcon(__instance.m_listElement);
                 FillConfigLists();
 
                 // Add copy of main panel to use as sell list
@@ -529,6 +741,7 @@ namespace TradersExtended
                 // Link objects
                 listRoot = items.Find("ListRoot").GetComponent<RectTransform>();
                 listElement = items.Find("ItemElement").gameObject;
+                InitializeNonTeleportableIcon(listElement);
                 itemEnsureVisible = items.GetComponent<ScrollRectEnsureVisible>();
                 tooltipAnchor = sellPanel.transform.Find("TooltipAnchor").GetComponent<RectTransform>();
 
@@ -590,20 +803,10 @@ namespace TradersExtended
                 sellButton.GetComponent<UIGamePad>().m_blockingElements.Add(amountDialog);
                 RepairPanel.AddButtonBlocker(amountDialog);
 
-                // Move store to the left to create space between
-                if (epicLootPlugin != null)
-                {
-                    MethodInfo IsAdventureModeEnabledMethod = AccessTools.Method(epicLootPlugin.GetType(), "IsAdventureModeEnabled");
-                    if (IsAdventureModeEnabledMethod != null)
-                        _adventureModeEnabled = () => (bool)IsAdventureModeEnabledMethod.Invoke(null, null);
-                }
-
                 // Move original tooltip anchor to the side
                 __instance.m_tooltipAnchor.anchorMax += new Vector2(1f, 0f);
 
                 LogInfo($"StoreGui panel patched");
-
-                SetupConfigWatcher();
 
                 buybackItem = null;
             }
@@ -637,31 +840,35 @@ namespace TradersExtended
                 if (__result == null)
                     __result = new List<Trader.TradeItem>();
 
-                if (disableOtherModsItems.Value)
+                ResolvedTraderConfig config = TraderConfigManager.Get(__instance);
+                if (config.DisableOtherModsItems)
                 {
                     __result.Clear();
 
-                    if (!disableVanillaItems.Value)
+                    if (!config.DisableVanillaItems)
                         AddVanillaAvailableItems(__instance, __result);
                 }
-                else if (disableVanillaItems.Value)
+                else if (config.DisableVanillaItems)
                 {
                     RemoveVanillaItems(__instance, __result);
                 }
 
-                AddAvailableItems(CommonListKey(ItemsListType.Buy), __result);
-                AddAvailableItems(TraderListKey(__instance, ItemsListType.Buy), __result);
+                AddAvailableItems(CommonListKey(ItemsListType.Buy), __instance, __result);
+                AddAvailableItems(TraderListKey(__instance, ItemsListType.Buy), __instance, __result);
 
-                ApplyFilterAndFlexiblePrices(__result);
+                ApplyFilterAndFlexiblePrices(__instance, __result);
 
-                if (enableBuyBack.Value && buybackItem != null)
+                buybackItem = BuybackManager.Get(__instance);
+                if (buybackItem != null)
                 {
-                    __result.Insert(0, ItemToSell.SetBuyBackItem(new Trader.TradeItem()
+                    Trader.TradeItem buybackTradeItem = ItemToSell.SetBuyBackItem(new Trader.TradeItem()
                     {
                         m_prefab = null,
                         m_stack = 0,
                         m_price = buybackItem.price
-                    }));
+                    });
+                    TraderCurrency.RegisterCurrency(buybackTradeItem, buybackItem.currency, __instance);
+                    __result.Insert(0, buybackTradeItem);
                 }
 
                 return null;
@@ -737,7 +944,7 @@ namespace TradersExtended
                     result.RemoveRange(writeIndex, result.Count - writeIndex);
             }
 
-            private static void ApplyFilterAndFlexiblePrices(List<Trader.TradeItem> result)
+            private static void ApplyFilterAndFlexiblePrices(Trader trader, List<Trader.TradeItem> result)
             {
                 if (result == null || result.Count == 0)
                     return;
@@ -768,7 +975,7 @@ namespace TradersExtended
                         }
                     }
 
-                    if (traderUseFlexiblePricing.Value)
+                    if (TraderConfigManager.Get(trader).TradersUseFlexiblePricing)
                     {
                         tradeItem = CloneTradeItem(tradeItem);
 
@@ -782,20 +989,35 @@ namespace TradersExtended
 
             private static Trader.TradeItem CloneTradeItem(Trader.TradeItem item)
             {
-                return new Trader.TradeItem()
+                Trader.TradeItem clone = new Trader.TradeItem()
                 {
                     m_prefab = item.m_prefab,
                     m_stack = item.m_stack,
                     m_price = item.m_price,
                     m_requiredGlobalKey = item.m_requiredGlobalKey
                 };
+                TraderCurrency.CopyCurrency(item, clone);
+                return clone;
             }
         }
 
-        private static void AddAvailableItems(string listKey, List<Trader.TradeItem> __result)
+        private static void AddAvailableItems(string listKey, Trader trader, List<Trader.TradeItem> result)
         {
-            if (tradeableItems.ContainsKey(listKey))
-                tradeableItems[listKey].DoIf(item => item.IsItemToSell(), item => __result.Add(item.ToTradeItem()));
+            if (!tradeableItems.TryGetValue(listKey, out List<TradeableItem> items))
+                return;
+
+            foreach (TradeableItem item in items)
+            {
+                if (!item.IsItemToSell(trader))
+                    continue;
+
+                Trader.TradeItem tradeItem = item.ToTradeItem();
+                if (tradeItem == null)
+                    continue;
+
+                TraderCurrency.RegisterCurrency(tradeItem, item.currency, trader);
+                result.Add(tradeItem);
+            }
         }
 
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.UpdateSellButton))]
@@ -812,6 +1034,13 @@ namespace TradersExtended
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Show))]
         public static class StoreGui_Show_Patch
         {
+            private static void Prefix(StoreGui __instance, Trader trader)
+            {
+                TraderCoins.ResetCurrentTrader(trader);
+                TraderCurrency.ApplyTraderCurrency(__instance, trader);
+                buybackItem = BuybackManager.Get(trader);
+            }
+
             private static void Postfix(StoreGui __instance)
             {
                 if (!IsOpen())
@@ -833,7 +1062,8 @@ namespace TradersExtended
             string traderTopic = StoreGui.instance.m_trader?.GetHoverName();
             string playerTopic = Player.m_localPlayer.GetPlayerName();
 
-            if (traderUseCoins.Value && traderUseFlexiblePricing.Value)
+            ResolvedTraderConfig config = TraderConfigManager.Get(StoreGui.instance.m_trader);
+            if (config.TradersUseCoins && config.TradersUseFlexiblePricing)
             {
                 traderTopic += GetPriceFactorString(TraderCoins.GetPriceFactor(buyPrice: true), reversed: true);
                 playerTopic += GetPriceFactorString(TraderCoins.GetPriceFactor(buyPrice: false));
@@ -856,6 +1086,9 @@ namespace TradersExtended
         {
             private static bool Prefix(Trader ___m_trader, float ___m_hideDistance)
             {
+                if (___m_trader == null || Player.m_localPlayer == null)
+                    return true;
+
                 if (Vector3.Distance(___m_trader.transform.position, Player.m_localPlayer.transform.position) > ___m_hideDistance)
                     return true;
 
@@ -874,6 +1107,7 @@ namespace TradersExtended
                 AmountDialog.Close();
 
                 TraderCoins.UpdateTraderCoins();
+                TraderCoins.ResetCurrentTrader(null);
             }
         }
 
@@ -1017,7 +1251,7 @@ namespace TradersExtended
 
             public static bool Prefix(StoreGui __instance)
             {
-                int playerCoins = __instance.GetPlayerCoins();
+                TraderCurrency.ApplyTraderCurrency(__instance);
                 int num = __instance.GetSelectedItemIndex();
                 
                 availableItems.Clear();
@@ -1062,10 +1296,16 @@ namespace TradersExtended
                     RectTransform rectTransform = element.transform as RectTransform;
                     float num2 = (__instance.m_listRoot.rect.width - rectTransform.rect.width) / 2f;
                     rectTransform.anchoredPosition = new Vector2(num2, i * (0f - __instance.m_itemSpacing) - num2);
-                    bool available = price <= playerCoins;
+                    ItemDrop currency = TraderCurrency.GetCurrency(tradeItem, __instance);
+                    int playerCurrency = TraderCurrency.GetPlayerCurrencyAmount(tradeItem, __instance);
+                    bool available = price <= playerCurrency;
                     Image component = element.transform.Find("icon").GetComponent<Image>();
                     component.sprite = itemData.GetIcon();
-                    component.color = available ? (isBuyback ? colorBuybackHighlighted.Value : Color.white) : new Color(1f, 0f, 1f, 0f);
+                    ResolvedTraderConfig config = TraderConfigManager.Get(__instance.m_trader);
+                    component.color = available ? (isBuyback ? config.BuybackItemHighlightedColor : Color.white) : new Color(1f, 0f, 1f, 0f);
+                    bool showNonTeleportable = !itemData.m_shared.m_teleportable &&
+                                               (ZoneSystem.instance == null || !ZoneSystem.instance.GetGlobalKey(GlobalKeys.TeleportAll));
+                    SetNonTeleportableIcon(element, showNonTeleportable);
                     string text = Localization.instance.Localize(itemData.m_shared.m_name);
 
                     if (quality > 1)
@@ -1076,11 +1316,12 @@ namespace TradersExtended
 
                     TMP_Text component2 = element.transform.Find("name").GetComponent<TMP_Text>();
                     component2.text = text;
-                    component2.color = available ? (isBuyback ? colorBuybackText.Value : Color.white) : Color.grey;
+                    component2.color = available ? (isBuyback ? config.BuybackItemFontColor : Color.white) : Color.grey;
 
                     string tooltip = ItemDrop.ItemData.GetTooltip(itemData, quality == 0 ? itemData.m_quality : quality, crafting: false, itemData.m_worldLevel);
 
                     element.GetComponent<UITooltip>().Set(itemData.m_shared.m_name, tooltip, __instance.m_tooltipAnchor);
+                    SetCurrencyIcon(element, currency);
                     TMP_Text component3 = Utils.FindChild(element.transform, "price").GetComponent<TMP_Text>();
                     component3.text = price.ToString();
                     if (!available)
@@ -1094,8 +1335,8 @@ namespace TradersExtended
                     if (isBuyback)
                     {
                         ColorBlock colors = element.GetComponent<Button>().colors;
-                        colors.normalColor = colorBuybackNormal.Value;
-                        colors.highlightedColor = colorBuybackHighlighted.Value;
+                        colors.normalColor = config.BuybackItemBackgroundColor;
+                        colors.highlightedColor = config.BuybackItemHighlightedColor;
                         element.GetComponent<Button>().colors = colors;
                     }
 
@@ -1110,42 +1351,106 @@ namespace TradersExtended
             }
         }
 
+        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.CanAfford))]
+        public static class StoreGui_CanAfford_CustomCurrency
+        {
+            private static bool Prefix(StoreGui __instance, Trader.TradeItem item, ref bool __result)
+            {
+                if (item == null || TraderCurrency.UsesStoreCurrency(item, __instance))
+                    return true;
+
+                __result = TraderCurrency.GetPlayerCurrencyAmount(item, __instance) >= item.m_price;
+                return false;
+            }
+        }
+
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.BuySelectedItem))]
         public static class StoreGui_BuySelectedItem_TraderCoinsUpdate
         {
-            public static bool isCalled = false;
+            private sealed class PurchaseState
+            {
+                internal ItemDrop OriginalCurrency;
+                internal Trader.TradeItem TradeItem;
+                internal int OriginalStack;
+                internal int OriginalQuality;
+                internal IDisposable BalanceTransaction;
+            }
+
+            public static bool isCalled;
 
             [HarmonyPriority(Priority.First)]
-            public static bool Prefix(StoreGui __instance, ref Tuple<int, int> __state)
+            private static bool Prefix(StoreGui __instance, ref PurchaseState __state)
             {
                 isCalled = true;
+                Trader.TradeItem selectedItem = __instance.m_selectedItem;
+                if (selectedItem == null)
+                    return true;
 
-                if (__instance.m_selectedItem != null && __instance.CanAfford(__instance.m_selectedItem))
+                __state = new PurchaseState
                 {
-                    if (BuyBackItem(__instance))
-                        return false;
+                    OriginalCurrency = __instance.m_coinPrefab,
+                    TradeItem = selectedItem,
+                    OriginalStack = selectedItem.m_stack,
+                    OriginalQuality = selectedItem.m_prefab != null ? selectedItem.m_prefab.m_itemData.m_quality : 0,
+                    BalanceTransaction = TraderCoins.BeginBalanceTransaction(TraderCoins.BalanceOperation.Spend)
+                };
 
-                    TradeableItem.GetStackQualityFromStack(__instance.m_selectedItem.m_stack, out int stack, out int quality);
+                ItemDrop currency = TraderCurrency.GetCurrency(selectedItem, __instance);
+                if (currency != null)
+                    __instance.m_coinPrefab = currency;
+
+                if (!__instance.CanAfford(selectedItem))
+                    return true;
+
+                if (ItemToSell.IsBuyBackItem(selectedItem))
+                {
+                    BuyBackItem(__instance);
+                    return false;
+                }
+
+                if (selectedItem.m_prefab != null)
+                {
+                    TradeableItem.GetStackQualityFromStack(selectedItem.m_stack, out int stack, out int quality);
                     if (quality != 0)
                     {
-                        __state = Tuple.Create(__instance.m_selectedItem.m_stack, __instance.m_selectedItem.m_prefab.m_itemData.m_quality);
-                        __instance.m_selectedItem.m_stack = stack;
-                        __instance.m_selectedItem.m_prefab.m_itemData.m_quality = quality;
+                        selectedItem.m_stack = stack;
+                        selectedItem.m_prefab.m_itemData.m_quality = quality;
                     }
                 }
 
                 return true;
             }
 
-            [HarmonyPriority(Priority.First)]
-            public static void Postfix(StoreGui __instance, Tuple<int, int> __state)
+            private static void Restore(StoreGui storeGui, PurchaseState state)
             {
                 isCalled = false;
-                if (__state != null && __instance.m_selectedItem?.m_prefab?.m_itemData != null)
+                if (state == null)
+                    return;
+
+                state.BalanceTransaction?.Dispose();
+                state.BalanceTransaction = null;
+
+                if (storeGui != null && state.OriginalCurrency != null)
+                    storeGui.m_coinPrefab = state.OriginalCurrency;
+
+                if (state.TradeItem != null)
                 {
-                    __instance.m_selectedItem.m_stack = __state.Item1;
-                    __instance.m_selectedItem.m_prefab.m_itemData.m_quality = __state.Item2;
+                    state.TradeItem.m_stack = state.OriginalStack;
+                    if (state.TradeItem.m_prefab != null)
+                        state.TradeItem.m_prefab.m_itemData.m_quality = state.OriginalQuality;
                 }
+            }
+
+            [HarmonyPriority(Priority.First)]
+            private static void Postfix(StoreGui __instance, PurchaseState __state)
+            {
+                Restore(__instance, __state);
+            }
+
+            private static Exception Finalizer(StoreGui __instance, PurchaseState __state, Exception __exception)
+            {
+                Restore(__instance, __state);
+                return __exception;
             }
         }
 

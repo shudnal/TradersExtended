@@ -1,3 +1,14 @@
+﻿# 2.0.0
+* added YAML, YML and CSV support for trader item configurations
+* added selectable JSON, YML and CSV formats to the `tradersextended save` command and changed `itemlist` export to CSV
+* added support for splitting trader buy and sell lists across multiple files with optional dot-separated identifiers
+* added personal configuration files for configuring each trader independently
+* added different currencies for entire traders and individual buy and sell items
+* made buyback separate for each trader, persistent between sessions and optionally limited by world-time duration
+* added trader sell prices to regular item tooltips
+* added the non-teleportable marker to applicable items in the trader buy list
+* improved reliability of trader balances, flexible sale prices, buyback and live configuration reloads
+
 # 1.3.13
 * more compatibility with other mods in buy item list
 * new config to remove other mods items from buy list entirely

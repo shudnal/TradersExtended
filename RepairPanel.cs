@@ -49,11 +49,18 @@ namespace TradersExtended
             repairButton.GetComponent<UIGamePad>().m_blockingElements.Add(blocker);
         }
 
-        public static bool TraderCanRepair(Trader trader) => traderRepair.Value && (_tradersToRepairWeapons.Contains(TraderName(trader)) || _tradersToRepairArmor.Contains(TraderName(trader)));
+        public static bool TraderCanRepair(Trader trader)
+        {
+            ResolvedTraderConfig config = TraderConfigManager.Get(trader);
+            return config.CanRepairWeapons || config.CanRepairArmor;
+        }
 
         public static void Update(StoreGui storeGui)
         {
             if (StoreGui.instance == null || !StorePanel.IsOpen())
+                return;
+
+            if (repairPanel == null || repairButton == null)
                 return;
 
             repairPanel.SetActive(TraderCanRepair(storeGui.m_trader));
@@ -72,16 +79,30 @@ namespace TradersExtended
                 return;
 
             ItemData item = GetItemToRepair(storeGui);
+            ResolvedTraderConfig config = TraderConfigManager.Get(storeGui.m_trader);
+            int configuredCost = config.TradersRepairCost;
+            int repairCost = configuredCost == int.MinValue ? int.MaxValue : Math.Abs(configuredCost);
+            ItemDrop repairCurrency = TraderCurrency.GetCurrency(config.RepairCurrencyPrefab, storeGui);
+            int availableCurrency = repairCurrency == null
+                ? 0
+                : Player.m_localPlayer.GetInventory().CountItems(repairCurrency.m_itemData.m_shared.m_name);
+
             if (item == null)
                 Player.m_localPlayer.Message(MessageHud.MessageType.Center, Player.m_localPlayer.GetPlayerName() + " $msg_doesnotneedrepair");
-            else if (storeGui.GetPlayerCoins() < Math.Abs(traderRepairCost.Value))
-                Player.m_localPlayer.Message(MessageHud.MessageType.Center, "$msg_outof $item_coins");
+            else if (repairCurrency == null || availableCurrency < repairCost)
+            {
+                string currencyToken = repairCurrency != null ? repairCurrency.m_itemData.m_shared.m_name : CoinsPatches.itemDropNameCoins;
+                Player.m_localPlayer.Message(MessageHud.MessageType.Center, $"$msg_outof {currencyToken}");
+            }
             else
             {
                 item.m_durability = item.GetMaxDurability();
 
-                if (traderRepairCost.Value != 0)
-                    Player.m_localPlayer.GetInventory().RemoveItem(storeGui.m_coinPrefab.m_itemData.m_shared.m_name, Math.Abs(traderRepairCost.Value));
+                if (repairCost != 0)
+                {
+                    Player.m_localPlayer.GetInventory().RemoveItem(repairCurrency.m_itemData.m_shared.m_name, repairCost);
+                    TraderCoins.UpdateTraderCoins(repairCost);
+                }
 
                 repairItemDoneEffects?.Create(Player.m_localPlayer.transform.position, Quaternion.identity);
 
@@ -98,7 +119,7 @@ namespace TradersExtended
 
         public static ItemData GetItemToRepair(StoreGui storeGui)
         {
-            if (Player.m_localPlayer == null || storeGui == null || storeGui.m_trader == null)
+            if (Player.m_localPlayer == null || storeGui == null || storeGui.m_trader == null || InventoryGui.instance == null)
                 return null;
 
             InventoryGui.instance.m_tempWornItems.Clear();
@@ -112,6 +133,8 @@ namespace TradersExtended
 
         private static bool IsCapableOfRepair(Trader trader, ItemData item)
         {
+            ResolvedTraderConfig config = TraderConfigManager.Get(trader);
+
             if (item.m_shared.m_itemType == ItemData.ItemType.OneHandedWeapon ||
                 item.m_shared.m_itemType == ItemData.ItemType.Attach_Atgeir ||
                 item.m_shared.m_itemType == ItemData.ItemType.Bow ||
@@ -120,7 +143,7 @@ namespace TradersExtended
                 item.m_shared.m_itemType == ItemData.ItemType.Torch ||
                 item.m_shared.m_itemType == ItemData.ItemType.TwoHandedWeapon ||
                 item.m_shared.m_itemType == ItemData.ItemType.TwoHandedWeaponLeft)
-                return _tradersToRepairWeapons.Contains(TraderName(trader));
+                return config.CanRepairWeapons;
 
             if (item.m_shared.m_itemType == ItemData.ItemType.Helmet ||
                 item.m_shared.m_itemType == ItemData.ItemType.Chest ||
@@ -128,7 +151,7 @@ namespace TradersExtended
                 item.m_shared.m_itemType == ItemData.ItemType.Shoulder ||
                 item.m_shared.m_itemType == ItemData.ItemType.Utility ||
                 item.m_shared.m_itemType == ItemData.ItemType.Customization)
-                return _tradersToRepairArmor.Contains(TraderName(trader));
+                return config.CanRepairArmor;
 
             return false;
         }
@@ -139,6 +162,9 @@ namespace TradersExtended
             [HarmonyPriority(Priority.Last)]
             private static void Postfix(List<Recipe> ___m_recipes)
             {
+                if (___m_recipes == null)
+                    return;
+
                 foreach (Recipe _recipe in ___m_recipes)
                     if (_recipe.m_craftingStation?.name == s_stationEffectName && _recipe.m_craftingStation.m_repairItemDoneEffects != null)
                     {
