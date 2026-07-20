@@ -30,6 +30,10 @@ namespace TradersExtended
         public const string pluginName = "Traders Extended";
         public const string pluginVersion = "2.0.0";
 
+        internal const string DefaultEditorGlobalKeys = "defeated_bonemass,defeated_gdking,defeated_goblinking,defeated_dragon,defeated_eikthyr,defeated_queen,defeated_fader,defeated_serpent,KilledTroll,killed_surtling,KilledBat,Hildir1,Hildir2,Hildir3";
+        internal const string DefaultEditorPlayerKeys = "GP_Eikthyr,GP_TheElder,GP_Bonemass,GP_Moder,GP_Yagluth,GP_Queen,GP_Fader";
+        internal const string DefaultEditorVisibleItemColumns = "Prefab,Name,Stack,Price,Quality,Currency,RequiredGlobalKey,BlockedGlobalKey,RequiredPlayerKey,BlockedPlayerKey";
+
         private readonly Harmony harmony = new Harmony(pluginID);
 
         internal static readonly ConfigSync configSync = new ConfigSync(pluginID)
@@ -42,9 +46,23 @@ namespace TradersExtended
 
         public static ManualLogSource logger;
         internal static TradersExtended instance;
+        internal static ConfigEditor configEditor;
 
         private static ConfigEntry<bool> loggingEnabled;
         private static ConfigEntry<bool> configLocked;
+
+        internal static ConfigEntry<KeyboardShortcut> configEditorShortcut;
+        internal static ConfigEntry<Vector2> configEditorWindowPosition;
+        internal static ConfigEntry<Vector2> configEditorWindowSize;
+        internal static ConfigEntry<bool> configEditorBlockGameInput;
+        internal static ConfigEntry<bool> configEditorUseValheimGuiScale;
+        internal static ConfigEntry<float> configEditorUiScale;
+        internal static ConfigEntry<int> configEditorFontSize;
+        internal static ConfigEntry<float> configEditorFileListWidth;
+        internal static ConfigEntry<bool> configEditorShowAllItems;
+        internal static ConfigEntry<string> configEditorGlobalKeys;
+        internal static ConfigEntry<string> configEditorPlayerKeys;
+        internal static ConfigEntry<string> configEditorVisibleItemColumns;
 
         public static ConfigEntry<bool> checkForDiscovery;
         internal static ConfigEntry<string> checkForDiscoveryIgnoreItems;
@@ -100,7 +118,7 @@ namespace TradersExtended
             .IgnoreUnmatchedProperties()
             .Build();
 
-        private static DirectoryInfo configDirectory;
+        internal static DirectoryInfo configDirectory;
         private static readonly List<FileSystemWatcher> configWatchers = new List<FileSystemWatcher>();
         private static Coroutine configReloadCoroutine;
         private static Coroutine configLoadCoroutine;
@@ -123,6 +141,7 @@ namespace TradersExtended
             configDirectory = new DirectoryInfo(Paths.ConfigPath);
 
             ConfigInit();
+            configEditor = new ConfigEditor();
             configSync.AddLockingConfigEntry(configLocked);
             itemConfigs.ValueChanged += StartConfigLoad;
             traderConfigFiles.ValueChanged += TraderConfigManager.LoadSyncedConfigs;
@@ -135,6 +154,7 @@ namespace TradersExtended
 
         private void Start()
         {
+            configEditor?.MarkGameWindowReady();
             FillConfigLists();
             TraderCurrency.RebuildOverrides();
             SetupConfigWatcher();
@@ -142,11 +162,30 @@ namespace TradersExtended
 
         private void Update()
         {
+            if (instance != null && instance != this)
+                return;
+            configEditor?.Update();
             AmountDialog.Update();
+        }
+
+        private void LateUpdate()
+        {
+            if (instance != null && instance != this)
+                return;
+            configEditor?.LateUpdate();
+        }
+
+        private void OnGUI()
+        {
+            if (instance != null && instance != this)
+                return;
+            configEditor?.OnGUI();
         }
 
         private void OnDestroy()
         {
+            if (instance != null && instance != this)
+                return;
             DisposeConfigWatchers();
             if (configReloadCoroutine != null)
                 StopCoroutine(configReloadCoroutine);
@@ -156,6 +195,8 @@ namespace TradersExtended
             itemConfigs.ValueChanged -= StartConfigLoad;
             traderConfigFiles.ValueChanged -= TraderConfigManager.LoadSyncedConfigs;
             BuybackManager.ResetCache();
+            configEditor?.Dispose();
+            configEditor = null;
             Config.Save();
             harmony.UnpatchSelf();
             instance = null;
@@ -177,6 +218,18 @@ namespace TradersExtended
         {
             configLocked = serverConfig("General", "Lock Configuration", true, "Configuration is locked and can be changed by server administrators only.");
             loggingEnabled = config("General", "Logging enabled", false, "Enable diagnostic logging. [Not synchronized with server]", false);
+            configEditorShortcut = config("Configuration editor", "Configuration editor shortcut", new KeyboardShortcut(KeyCode.P, KeyCode.LeftControl), "Open or close the in-game Traders Extended configuration editor. [Not synchronized with server]", false);
+            configEditorWindowPosition = config("Configuration editor", "Configuration editor position", new Vector2(-1f, -1f), "Saved position of the configuration editor window. [Not synchronized with server]", false);
+            configEditorWindowSize = config("Configuration editor", "Configuration editor size", new Vector2(1500f, 850f), "Saved logical size of the configuration editor window. [Not synchronized with server]", false);
+            configEditorBlockGameInput = config("Configuration editor", "Block game input", true, "Block all Valheim gameplay input while the configuration editor is open. IMGUI input and the editor shortcut remain available. [Not synchronized with server]", false);
+            configEditorUseValheimGuiScale = config("Configuration editor", "Use Valheim GUI scaling", true, "Multiply the editor scale by Valheim's Accessibility - Scale GUI setting. [Not synchronized with server]", false);
+            configEditorUiScale = config("Configuration editor", "Scale", 1.0f, new ConfigDescription("Additional configuration editor UI scale. [Not synchronized with server]", new AcceptableValueRange<float>(0.6f, 2.0f)), false);
+            configEditorFontSize = config("Configuration editor", "Font size", 13, new ConfigDescription("Base configuration editor IMGUI font size. [Not synchronized with server]", new AcceptableValueRange<int>(9, 28)), false);
+            configEditorFileListWidth = config("Configuration editor", "File list width", 382f, new ConfigDescription("Logical width of the configuration file column. It can also be changed by dragging the column separator. [Not synchronized with server]", new AcceptableValueRange<float>(240f, 800f)), false);
+            configEditorShowAllItems = config("Configuration editor", "Show all items", false, "Show every ObjectDB item in item pickers. When disabled, hide AI equipment and invalid or non-user-facing items. [Not synchronized with server]", false);
+            configEditorVisibleItemColumns = config("Configuration editor", "Visible item columns", DefaultEditorVisibleItemColumns, "Comma-separated item editor columns to display: Prefab, Name, Stack, Price, Quality, Currency, RequiredGlobalKey, BlockedGlobalKey, RequiredPlayerKey and BlockedPlayerKey. [Not synchronized with server]", false);
+            configEditorGlobalKeys = config("Configuration editor", "Global keys", DefaultEditorGlobalKeys, "Comma-separated global keys available in the configuration editor. Custom keys can be added or removed in the picker; built-in keys remain protected. [Not synchronized with server]", false);
+            configEditorPlayerKeys = config("Configuration editor", "Player keys", DefaultEditorPlayerKeys, "Comma-separated player keys available in the configuration editor. Custom keys can be added or removed in the picker; built-in keys remain protected. [Not synchronized with server]", false);
 
             checkForDiscovery = config("Item discovery", "Sell only discovered items", true, "A trader will not sell items that the buyer has not discovered.");
             checkForDiscoveryIgnoreItems = config("Item discovery", "Undiscovered items list to sell", "", "Comma-separated prefab names that bypass the discovery check. Vanilla trader items are included by default.");
@@ -238,7 +291,8 @@ namespace TradersExtended
                 serverControlledByDefault: synchronizedSetting).SourceConfig;
 
             if (!string.Equals(group, "General", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(group, "Item coins", StringComparison.OrdinalIgnoreCase))
+                !string.Equals(group, "Item coins", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(group, "Configuration editor", StringComparison.OrdinalIgnoreCase))
                 entry.SettingChanged += delegate { TraderConfigManager.InvalidateAndRefresh(); };
 
             return entry;
@@ -268,25 +322,27 @@ namespace TradersExtended
 
         public static void InitCommands()
         {
-            new Terminal.ConsoleCommand("tradersextended", "save [json|yml|csv] - Save the full item list as JSON by default, itemlist - Save the filtered item list as CSV", delegate(Terminal.ConsoleEventArgs args)
+            new Terminal.ConsoleCommand("tradersextended", "editor - Open the configuration editor, save [json|yml|csv] - Save the full item list as JSON by default, itemlist - Save the filtered item list as CSV", delegate(Terminal.ConsoleEventArgs args)
             {
                 if (args.Length >= 2)
                 {
                     string action = args[1];
-                    if (string.Equals(action, "save", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(action, "editor", StringComparison.OrdinalIgnoreCase))
+                        configEditor?.Toggle();
+                    else if (string.Equals(action, "save", StringComparison.OrdinalIgnoreCase))
                         SaveFromObjectDB(args.Context, args.Length >= 3 ? args[2] : "json");
                     else if (string.Equals(action, "itemlist", StringComparison.OrdinalIgnoreCase))
                         ExportItemListFromObjectDB(args.Context);
                     else
-                        args.Context.AddString("Actions: save [json|yml|csv] - Save the full item list as JSON by default, itemlist - Save the filtered item list as CSV");
+                        args.Context.AddString("Actions: editor - Open the configuration editor, save [json|yml|csv] - Save the full item list as JSON by default, itemlist - Save the filtered item list as CSV");
                 }
                 else
                 {
-                    args.Context.AddString("Actions: save [json|yml|csv] - Save the full item list as JSON by default, itemlist - Save the filtered item list as CSV");
+                    args.Context.AddString("Actions: editor - Open the configuration editor, save [json|yml|csv] - Save the full item list as JSON by default, itemlist - Save the filtered item list as CSV");
                 }
             }, false, false, false, false, false, delegate
             {
-                return new List<string> { "save", "itemlist" };
+                return new List<string> { "editor", "save", "itemlist" };
             }, true, false);
 
             new Terminal.ConsoleCommand("settradercoins", "[trader] [amount]", delegate(Terminal.ConsoleEventArgs args)
@@ -546,7 +602,7 @@ namespace TradersExtended
             internal string Content;
         }
 
-        private static void ReadConfigs()
+        internal static void ReadConfigs()
         {
             Dictionary<string, string> localItemConfigs = new Dictionary<string, string>(StringComparer.Ordinal);
             Dictionary<string, PersonalTraderConfigSource> localTraderConfigs =
@@ -578,8 +634,16 @@ namespace TradersExtended
             FileInfo[] files;
             try
             {
-                files = directory.GetFiles(pluginID + ".*", SearchOption.AllDirectories)
+                string editorDirectory = Path.GetFullPath(Path.Combine(Paths.ConfigPath, pluginID));
+                files = directory.GetFiles("*", SearchOption.AllDirectories)
                     .Where(file => IsSupportedConfigExtension(file.Extension))
+                    .Where(file =>
+                    {
+                        bool legacyName = file.Name.StartsWith(pluginID + ".", StringComparison.OrdinalIgnoreCase);
+                        string fullName = Path.GetFullPath(file.FullName);
+                        bool inEditorDirectory = fullName.StartsWith(editorDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+                        return legacyName || inEditorDirectory;
+                    })
                     .OrderBy(file => file.Name, StringComparer.OrdinalIgnoreCase)
                     .ThenBy(file => file.FullName, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
@@ -767,10 +831,16 @@ namespace TradersExtended
             return TryParseConfigName(remainder, out trader, out listType);
         }
 
-        private static bool TryParseConfigFileName(string fileName, out string trader, out ItemsListType listType)
+        internal static bool TryParseConfigFileName(string fileName, out string trader, out ItemsListType listType)
+        {
+            return TryParseConfigFileName(fileName, out trader, out listType, out _);
+        }
+
+        internal static bool TryParseConfigFileName(string fileName, out string trader, out ItemsListType listType, out string identifier)
         {
             trader = string.Empty;
             listType = ItemsListType.Buy;
+            identifier = string.Empty;
 
             string extension = Path.GetExtension(fileName);
             if (!IsSupportedItemConfigExtension(extension))
@@ -778,16 +848,23 @@ namespace TradersExtended
 
             string withoutExtension = Path.GetFileNameWithoutExtension(fileName);
             string prefix = pluginID + ".";
-            if (!withoutExtension.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return false;
+            string configName = withoutExtension.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                ? withoutExtension.Substring(prefix.Length)
+                : withoutExtension;
 
-            return TryParseConfigName(withoutExtension.Substring(prefix.Length), out trader, out listType);
+            return TryParseConfigName(configName, out trader, out listType, out identifier);
         }
 
         private static bool TryParseConfigName(string configName, out string trader, out ItemsListType listType)
         {
+            return TryParseConfigName(configName, out trader, out listType, out _);
+        }
+
+        private static bool TryParseConfigName(string configName, out string trader, out ItemsListType listType, out string identifier)
+        {
             trader = string.Empty;
             listType = ItemsListType.Buy;
+            identifier = string.Empty;
 
             if (string.IsNullOrWhiteSpace(configName))
                 return false;
@@ -807,6 +884,7 @@ namespace TradersExtended
                 if (string.IsNullOrWhiteSpace(trader))
                     return false;
 
+                identifier = string.Join(".", segments.Skip(index + 1));
                 listType = parsedListType;
                 return true;
             }
@@ -814,7 +892,7 @@ namespace TradersExtended
             return false;
         }
 
-        private static bool TryParseTraderConfigFileName(string fileName, out string trader)
+        internal static bool TryParseTraderConfigFileName(string fileName, out string trader)
         {
             trader = string.Empty;
             if (!IsSupportedTraderConfigExtension(Path.GetExtension(fileName)))
@@ -822,10 +900,11 @@ namespace TradersExtended
 
             string withoutExtension = Path.GetFileNameWithoutExtension(fileName);
             string prefix = pluginID + ".";
-            if (!withoutExtension.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                return false;
+            string configName = withoutExtension.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                ? withoutExtension.Substring(prefix.Length)
+                : withoutExtension;
 
-            return TryParseTraderConfigName(withoutExtension.Substring(prefix.Length), out trader);
+            return TryParseTraderConfigName(configName, out trader);
         }
 
         private static bool TryParseEmbeddedTraderConfigName(string fileName, out string trader)
@@ -855,12 +934,12 @@ namespace TradersExtended
             return !string.IsNullOrWhiteSpace(trader);
         }
 
-        private static bool IsSupportedConfigExtension(string extension)
+        internal static bool IsSupportedConfigExtension(string extension)
         {
             return IsSupportedItemConfigExtension(extension) || IsSupportedTraderConfigExtension(extension);
         }
 
-        private static bool IsSupportedItemConfigExtension(string extension)
+        internal static bool IsSupportedItemConfigExtension(string extension)
         {
             return string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(extension, ".yaml", StringComparison.OrdinalIgnoreCase) ||
@@ -868,7 +947,7 @@ namespace TradersExtended
                    string.Equals(extension, ".csv", StringComparison.OrdinalIgnoreCase);
         }
 
-        private static bool IsSupportedTraderConfigExtension(string extension)
+        internal static bool IsSupportedTraderConfigExtension(string extension)
         {
             return string.Equals(extension, ".json", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(extension, ".yaml", StringComparison.OrdinalIgnoreCase) ||
@@ -1035,7 +1114,7 @@ namespace TradersExtended
             return TryGetSyncedConfigMetadata(key, out _, out int index, out _) ? index : int.MaxValue;
         }
 
-        private static List<TradeableItem> DeserializeItems(string content, string source)
+        internal static List<TradeableItem> DeserializeItems(string content, string source)
         {
             if (string.IsNullOrWhiteSpace(content))
                 return new List<TradeableItem>();

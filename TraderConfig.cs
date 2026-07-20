@@ -284,7 +284,7 @@ namespace TradersExtended
             };
         }
 
-        private static string ResolveCurrencyForTrader(string value, string traderName)
+        internal static string ResolveCurrencyForTrader(string value, string traderName)
         {
             if (string.IsNullOrWhiteSpace(value))
                 return string.Empty;
@@ -396,7 +396,7 @@ namespace TradersExtended
             return new Vector2(xToken.Value<float>(), yToken.Value<float>());
         }
 
-        private static JObject DeserializeTraderConfig(string content, string source)
+        internal static JObject DeserializeTraderConfig(string content, string source)
         {
             if (string.IsNullOrWhiteSpace(content))
                 return new JObject();

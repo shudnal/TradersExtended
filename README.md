@@ -9,6 +9,7 @@ Traders Extended adds trader-specific and common buy/sell lists, a two-column st
 - Trader-specific and common buy and sell lists.
 - JSON, YAML, YML, and CSV item config files.
 - JSON, YAML, and YML personal settings files for individual traders.
+- Built-in in-game editor for trader settings and item lists.
 - Live config reload and server synchronization through Conditional Config Sync.
 - Per-trader default currencies and per-item currency overrides for both buy and sell entries.
 - Currency-aware purchases, sales, repairs, buyback, amount dialog, price icons, and balance accounting.
@@ -35,7 +36,7 @@ A Thunderstore-compatible mod manager installs these dependencies automatically.
 
 ## Item config files
 
-Item files may be placed anywhere below `BepInEx/config` or embedded into the assembly under `TradersExtended.Configs`.
+New item files should be placed in `BepInEx/config/shudnal.TradersExtended`. Legacy files beginning with `shudnal.TradersExtended.` are still supported anywhere below `BepInEx/config`. Item configurations may also be embedded into the assembly under `TradersExtended.Configs`.
 
 Supported extensions:
 
@@ -44,24 +45,26 @@ Supported extensions:
 - `.yml`
 - `.csv`
 
-File names use this format:
+New file names use this format:
 
 ```text
-shudnal.TradersExtended.<trader-or-common>.<buy-or-sell>[.<identifier>].<extension>
+<trader-or-common>.<buy-or-sell>[.<identifier>].<extension>
 ```
 
 Examples:
 
 ```text
-shudnal.TradersExtended.haldor.buy.json
-shudnal.TradersExtended.haldor.sell.yaml
-shudnal.TradersExtended.hildir.buy.yml
-shudnal.TradersExtended.bogwitch.sell.csv
-shudnal.TradersExtended.common.buy.yaml
-shudnal.TradersExtended.common.sell.json
-shudnal.TradersExtended.hildir.buy.food.basic.json
-shudnal.TradersExtended.hildir.buy.food.progression.csv
+haldor.buy.json
+haldor.sell.yaml
+hildir.buy.yml
+bogwitch.sell.csv
+common.buy.yaml
+common.sell.json
+hildir.buy.food.basic.json
+hildir.buy.food.progression.csv
 ```
+
+The legacy `shudnal.TradersExtended.` prefix remains accepted, for example `shudnal.TradersExtended.haldor.buy.json`. Existing files keep their original names when saved by the editor.
 
 The optional identifier may contain multiple dot-separated segments. It is ignored when selecting the trader and list type, and exists only to split a trader list across multiple human-readable files.
 
@@ -164,18 +167,20 @@ Quote a field according to normal CSV rules when it contains a comma, quote, or 
 Each trader may have one personal settings file:
 
 ```text
-shudnal.TradersExtended.<trader>.config.json
-shudnal.TradersExtended.<trader>.config.yaml
-shudnal.TradersExtended.<trader>.config.yml
+<trader>.config.json
+<trader>.config.yaml
+<trader>.config.yml
 ```
 
 Examples:
 
 ```text
-shudnal.TradersExtended.haldor.config.json
-shudnal.TradersExtended.hildir.config.yaml
-shudnal.TradersExtended.bogwitch.config.yml
+haldor.config.json
+hildir.config.yaml
+bogwitch.config.yml
 ```
+
+The legacy `shudnal.TradersExtended.` prefix remains supported for existing files.
 
 Only one logical personal file is used per trader. Personal settings file names are fixed and do not support identifier suffixes after `.config`. The same source should contain only one of the JSON, YAML, or YML variants. When the same trader is configured in multiple sources, the whole higher-priority file replaces the lower-priority file:
 
@@ -192,7 +197,7 @@ The personal schema intentionally contains only settings that are meaningful for
 File name:
 
 ```text
-shudnal.TradersExtended.haldor.config.json
+haldor.config.json
 ```
 
 ```json
@@ -246,7 +251,7 @@ shudnal.TradersExtended.haldor.config.json
 File name:
 
 ```text
-shudnal.TradersExtended.haldor.config.yaml
+haldor.config.yaml
 ```
 
 ```yaml
@@ -311,6 +316,33 @@ shudnal.TradersExtended.haldor.config.yaml
 ```
 
 The buyback item colors remain global BepInEx settings and cannot be overridden by a personal trader file.
+
+
+## In-game configuration editor
+
+Press `Ctrl+P` or run:
+
+```text
+tradersextended editor
+```
+
+The editor manages files directly in:
+
+```text
+BepInEx/config/shudnal.TradersExtended
+```
+
+Existing supported files are grouped on the left as Buy items, Sell items, and Trader Settings. Each entry shows only the trader prefab, optional identifier, and extension; the complete original file name remains available as a tooltip. New item-list files can be created as JSON, YAML, YML, or CSV, while personal trader settings can be created as JSON, YAML, or YML. New files omit the legacy `shudnal.TradersExtended.` prefix. Existing files retain their current names when saved.
+
+Item-list files open as a searchable table with localized item names, compact icons, editable prefab and rule fields, multi-row selection and deletion, and pickers for item prefabs, currencies, global keys, and player keys. Use `Add items...` to keep the item picker open while adding several entries, and press `Ctrl+S` to save the active file. The row order remains unchanged while values are edited. Dedicated controls below the table sort the stored list on demand, move individual rows up or down, and choose which columns are visible. When multiple rows are selected, sorting is limited to those rows and leaves every unselected row in its existing position. The item picker can be sorted by prefab or localized item name. Rows are validated before saving: item and currency prefabs must exist, configured keys must be present in the corresponding editor list, and the same key cannot be both required and blocked. Invalid rows are outlined in red; an invalid item prefab replaces the row icon with a red exclamation mark, while other invalid fields use red text. Large filtered lists are displayed in pages to keep the editor responsive.
+
+The item picker hides AI equipment and non-user-facing or invalid entries by default. Enable `Show all items` to display the complete ObjectDB list. The available global-key and player-key lists are stored in the local `Configuration editor / Global keys` and `Configuration editor / Player keys` settings; custom keys can be added or removed directly in either picker, while the built-in defaults are protected. Active world keys and the current player's active player keys are marked in their respective pickers.
+
+Personal trader settings use typed controls. Enable `Override` only for values that should differ for that trader; disabled values continue to inherit the synchronized BepInEx configuration. Item-prefab fields provide a searchable picker, and Store GUI position is edited as separate `x` and `y` values.
+
+When connected to a dedicated server, the editor requests access from the server and the server checks the requesting peer directly against its current server administrator list (`adminlist.txt`). The client does not rely on `LocalPlayerIsAdminOrHost()` or a locally synchronized copy of the list. Every file operation is authorized again on the server before it is executed. Saving a file validates it, writes it to the selected local or server directory, and reloads the Traders Extended configuration.
+
+The editor uses Valheim Profiler-style window behavior: monitor-aware GUI scaling, Valheim accessibility scaling, dragging, resizing from the right or bottom edge and the lower-right handle, a draggable separator between the file list and editor, and square scrollbars. `Prevent input` can be changed directly in the editor header and is also available as a local BepInEx setting. `Configuration editor shortcut`, window position and size, `Scale`, `Use Valheim GUI scaling`, `Font size`, `File list width`, `Show all items`, and `Visible item columns` are stored together in the local `Configuration editor` section. `Visible item columns` is a comma-separated list using the tokens `Prefab`, `Name`, `Stack`, `Price`, `Quality`, `Currency`, `RequiredGlobalKey`, `BlockedGlobalKey`, `RequiredPlayerKey`, and `BlockedPlayerKey`.
 
 ## Custom currencies
 
@@ -409,14 +441,10 @@ Copy the `TradersExtended` folder into `BepInEx/plugins` and install all require
 
 ## Configuration UI
 
-Recommended configuration managers:
+The built-in editor handles Traders Extended item files and personal trader settings. The general BepInEx configuration can still be edited with a configuration manager:
 
 - [Configuration Manager](https://thunderstore.io/c/valheim/p/shudnal/ConfigurationManager/)
 - [Official BepInEx Configuration Manager](https://valheim.thunderstore.io/package/Azumatt/Official_BepInEx_ConfigurationManager/)
-
-The original spreadsheet helper remains available here:
-
-- [Traders Extended JSON Helper](https://docs.google.com/spreadsheets/d/1VgGlERaRb2rDB6ULdoWM39Sh0L_X1sR4dJE1CgRDsYI)
 
 ## Links
 
