@@ -1,4 +1,4 @@
-﻿# Traders Extended
+# Traders Extended
 
 ![logo](https://staticdelivery.nexusmods.com/mods/3667/images/headers/2509_1710675587.jpg)
 

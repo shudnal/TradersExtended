@@ -1,4 +1,4 @@
-﻿# 2.0.0
+# 2.0.0
 * added an in-game editor for trader settings and item lists, including dedicated-server administration, scalable windows and configurable gameplay input blocking
 * added YAML, YML and CSV support for trader item configurations
 * added selectable JSON, YML and CSV formats to the `tradersextended save` command and changed `itemlist` export to CSV
