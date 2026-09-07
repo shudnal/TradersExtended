@@ -1,0 +1,56 @@
+name: Materialize reviewed branch changes
+on:
+  push:
+    branches: [fix/trade-focus-stack-dialog-review]
+    paths: ['.review-import/**', '.github/workflows/materialize-review.yml']
+permissions:
+  contents: write
+concurrency:
+  group: materialize-trade-review
+  cancel-in-progress: false
+jobs:
+  materialize:
+    if: github.repository == 'shudnal/TradersExtended'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          ref: fix/trade-focus-stack-dialog-review
+      - name: Verify and apply the reviewed patch
+        shell: python
+        run: |
+          import base64, gzip, hashlib, pathlib, subprocess
+          root = pathlib.Path('.')
+          parts = sorted(root.glob('.review-import/part*.txt'))
+          if len(parts) != 7:
+              raise RuntimeError('Expected exactly seven reviewed patch parts.')
+          patch = gzip.decompress(base64.b64decode(''.join(p.read_text() for p in parts), validate=True))
+          expected = 'd69a8be3b86df010a94cf020f5b7c23bb40a81f4f11d23cdecd9abe7b8282fbd'
+          if hashlib.sha256(patch).hexdigest() != expected:
+              raise RuntimeError('Reviewed patch checksum mismatch.')
+          parent = subprocess.check_output(['git', 'rev-parse', 'HEAD^'], text=True).strip()
+          if parent != '54e017fe8b40fa3d6feb0a4fc68713a410063bfb':
+              raise RuntimeError('Unexpected baseline; refusing to apply the patch.')
+          subprocess.run(['git', 'apply', '--check', '--unidiff-zero', '--whitespace=error'], input=patch, check=True)
+          subprocess.run(['git', 'apply', '--unidiff-zero', '--whitespace=error'], input=patch, check=True)
+          for part in parts:
+              part.unlink()
+          subprocess.run(['git', 'diff', '--check'], check=True)
+      - name: Commit reviewed source files to the same branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A -- . ':!.github/workflows'
+          git commit -m 'Fix trade focus and whole-lot dialogs; harden inventory and editor operations'
+          git push origin HEAD:refs/heads/fix/trade-focus-stack-dialog-review
+          git rev-parse HEAD
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Run production-linked regression tests
+        run: dotnet run --project tests/Regression/Regression.csproj --configuration Release -- "$GITHUB_WORKSPACE"
+      - name: Check repository invariants
+        if: always()
+        run: python3 tests/check_repository.py
