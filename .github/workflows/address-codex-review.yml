@@ -1,0 +1,201 @@
+name: Apply Codex review fixes
+on:
+  push:
+    branches: [fix/trade-focus-stack-dialog-review]
+    paths: ['.github/workflows/address-codex-review.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Stage Codex review fixes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Apply reviewed source changes
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              file = Path(path)
+              text = file.read_text()
+              if text.count(old) != 1:
+                  raise RuntimeError(f'{path}: expected one replacement target, found {text.count(old)}')
+              file.write_text(text.replace(old, new))
+
+          replace_once('TradeInventory.cs', '''        internal static bool PlanRemoval(Inventory inventory, IEnumerable<ItemDrop.ItemData> candidates, int amount, out List<Removal> plan)
+''', '''        internal static int CapacityAfterRemoval(Inventory inventory, ItemDrop.ItemData item, int quality, int worldLevel,
+            IEnumerable<Removal> removal)
+        {
+            if (inventory == null || item?.m_shared == null || item.m_shared.m_maxStackSize <= 0)
+                return 0;
+
+            Dictionary<ItemDrop.ItemData, int> removedAmounts = new Dictionary<ItemDrop.ItemData, int>();
+            if (removal != null)
+                foreach (Removal part in removal)
+                {
+                    if (part?.Item == null || part.Amount <= 0 || !inventory.ContainsItem(part.Item))
+                        return 0;
+                    long combined = (long)(removedAmounts.TryGetValue(part.Item, out int current) ? current : 0) + part.Amount;
+                    if (combined > part.Item.m_stack)
+                        return 0;
+                    removedAmounts[part.Item] = (int)combined;
+                }
+
+            int maximumStack = item.m_shared.m_maxStackSize;
+            int emptySlots = Math.Max(inventory.GetEmptySlots(), 0);
+            long free = 0;
+            foreach (ItemDrop.ItemData existing in inventory.GetAllItems())
+            {
+                int removed = removedAmounts.TryGetValue(existing, out int planned) ? planned : 0;
+                int remaining = existing.m_stack - removed;
+                if (remaining <= 0)
+                {
+                    if (existing.m_stack > 0)
+                        emptySlots++;
+                    continue;
+                }
+
+                if (maximumStack > 1 && existing.m_shared.m_name == item.m_shared.m_name &&
+                    existing.m_quality == quality && existing.m_worldLevel == worldLevel)
+                    free += Math.Max(existing.m_shared.m_maxStackSize - remaining, 0);
+            }
+
+            free += (long)emptySlots * maximumStack;
+            return TradeAmounts.ClampBalance(free);
+        }
+
+        internal static bool PlanRemoval(Inventory inventory, IEnumerable<ItemDrop.ItemData> candidates, int amount, out List<Removal> plan)
+''')
+
+          replace_once('StorePanel.cs', '''        internal static int GetMaximumBuyLots(StoreGui store, Trader.TradeItem offer)
+        {
+            if (store?.m_trader == null || offer?.m_prefab == null || Player.m_localPlayer == null || ItemToSell.IsBuyBackItem(offer))
+                return 0;
+            TradeableItem.GetStackQualityFromStack(offer.m_stack, out int lotSize, out int quality);
+            ItemDrop.ItemData item = offer.m_prefab.m_itemData;
+            quality = quality == 0 ? item.m_quality : quality;
+            Inventory inventory = Player.m_localPlayer.GetInventory();
+            return TradeAmounts.MaximumBuyLots(lotSize, offer.m_price,
+                TradeInventory.CountCurrency(inventory, TraderCurrency.GetCurrency(offer, store)),
+                TradeInventory.Capacity(inventory, item, quality, Game.m_worldLevel));
+        }
+''', '''        internal static int GetMaximumBuyLots(StoreGui store, Trader.TradeItem offer)
+        {
+            if (store?.m_trader == null || offer?.m_prefab == null || Player.m_localPlayer == null || ItemToSell.IsBuyBackItem(offer))
+                return 0;
+
+            TradeableItem.GetStackQualityFromStack(offer.m_stack, out int lotSize, out int quality);
+            ItemDrop.ItemData item = offer.m_prefab.m_itemData;
+            quality = quality == 0 ? item.m_quality : quality;
+            Inventory inventory = Player.m_localPlayer.GetInventory();
+            ItemDrop currency = TraderCurrency.GetCurrency(offer, store);
+            int currencyAmount = TradeInventory.CountCurrency(inventory, currency);
+            int candidate = TradeAmounts.MaximumBuyLots(lotSize, offer.m_price, currencyAmount, int.MaxValue);
+
+            // Paying happens before the purchased item is inserted. A full inventory can therefore
+            // still accept the purchase when the payment empties a currency stack. Capacity is
+            // monotonic with the amount paid; iteratively reduce the candidate to the capacity that
+            // exists after its own payment plan until the greatest feasible whole-lot count is found.
+            while (candidate > 0)
+            {
+                if (!TradeAmounts.TryGetPrice(offer.m_price, candidate, 1d, out int price) ||
+                    !TradeInventory.PlanRemoval(inventory,
+                        inventory.GetAllItems().Where(existing => TradeInventory.MatchesCurrency(existing, currency)),
+                        price, out List<TradeInventory.Removal> payment))
+                    return 0;
+
+                int capacity = TradeInventory.CapacityAfterRemoval(inventory, item, quality, Game.m_worldLevel, payment);
+                int capacityLots = capacity / lotSize;
+                if (capacityLots >= candidate)
+                    return candidate;
+                candidate = capacityLots;
+            }
+
+            return 0;
+        }
+''')
+
+          replace_once('StorePanel.cs', '''            return first != null && second != null && first.m_prefab == second.m_prefab &&
+                first.m_stack == second.m_stack && first.m_requiredGlobalKey == second.m_requiredGlobalKey &&
+                SameCurrency(TraderCurrency.GetCurrency(first, StoreGui.instance), TraderCurrency.GetCurrency(second, StoreGui.instance));
+''', '''            return first != null && second != null && first.m_prefab == second.m_prefab &&
+                first.m_stack == second.m_stack && first.m_price == second.m_price &&
+                first.m_requiredGlobalKey == second.m_requiredGlobalKey &&
+                SameCurrency(TraderCurrency.GetCurrency(first, StoreGui.instance), TraderCurrency.GetCurrency(second, StoreGui.instance));
+''')
+
+          replace_once('tests/Regression/Program.cs', '''        Check(!TradeInventory.PlanRemoval(inventory, new[] { payable }, 9, out _), "Ineligible stacks cannot make up a shortage");
+        using (var snapshot = new TradeInventory.Snapshot(inventory))
+''', '''        Check(!TradeInventory.PlanRemoval(inventory, new[] { payable }, 9, out _), "Ineligible stacks cannot make up a shortage");
+
+        var purchase = Prefab("Purchase", 50);
+        var blocker = Prefab("Blocker", 1);
+        inventory = new Inventory { Slots = 2 };
+        var paymentStack = Stack(coins, 10, world: 1);
+        inventory.m_inventory.AddRange(new[] { paymentStack, Stack(blocker, 1, world: 1) });
+        Check(TradeInventory.Capacity(inventory, purchase.m_itemData, 1, 1) == 0, "Full inventory has no pre-payment purchase capacity");
+        Check(TradeInventory.PlanRemoval(inventory, new[] { paymentStack }, 10, out var fullPayment) &&
+            TradeInventory.CapacityAfterRemoval(inventory, purchase.m_itemData, 1, 1, fullPayment) == 50,
+            "A payment that consumes a currency stack exposes the freed slot to purchase preflight");
+        Check(TradeInventory.PlanRemoval(inventory, new[] { paymentStack }, 5, out var partialPayment) &&
+            TradeInventory.CapacityAfterRemoval(inventory, purchase.m_itemData, 1, 1, partialPayment) == 0,
+            "A partial payment does not invent an empty slot");
+        Check(TradeInventory.CapacityAfterRemoval(inventory, coins.m_itemData, 1, 1, partialPayment) == 95,
+            "When the bought item is also the currency, planned removal exposes stack space without double-counting slots");
+
+        inventory = new Inventory { Slots = 3 };
+        old = Stack(coins, 70, world: 0);
+        payable = Stack(coins, 8, world: 1);
+        inventory.m_inventory.AddRange(new[] { old, payable, Stack(impostor, 90, world: 1) });
+        Check(TradeInventory.PlanRemoval(inventory, new[] { payable }, 8, out plan), "Rollback payment plan is recreated after capacity scenarios");
+        using (var snapshot = new TradeInventory.Snapshot(inventory))
+''')
+
+          review = Path('docs/reviews/2026-09-07-repository-review.md')
+          text = review.read_text()
+          marker = '## Validation\n'
+          addition = '''## Codex follow-up review — 2026-09-08\n\n- Purchase capacity is evaluated against the projected inventory after its own currency-removal plan. A full inventory therefore no longer rejects a valid purchase when payment consumes a currency stack and frees the required slot. Partial payments do not create phantom slots, and same-item currency removal contributes only the resulting stack space.\n- Buy-offer restoration identity now includes `m_price`, preventing two otherwise identical configured offers with different prices from being silently interchanged after a list refresh.\n\n'''
+          if text.count(marker) != 1:
+              raise RuntimeError('review document validation marker not found exactly once')
+          review.write_text(text.replace(marker, addition + marker))
+      - name: Run source-only repository checks
+        run: |
+          python tests/check_repository.py
+          git diff --check
+          python -m pip install --quiet --only-binary=:all: tree-sitter==0.25.2 tree-sitter-c-sharp==0.23.1
+      - name: Parse C# syntax without compilation or execution
+        shell: python
+        run: |
+          import pathlib
+          from tree_sitter import Language, Parser
+          import tree_sitter_c_sharp
+          parser = Parser(Language(tree_sitter_c_sharp.language()))
+          errors = []
+          paths = sorted(pathlib.Path('.').rglob('*.cs'))
+          for path in paths:
+              tree = parser.parse(path.read_bytes())
+              if not tree.root_node.has_error:
+                  continue
+              nodes = [tree.root_node]
+              while nodes:
+                  node = nodes.pop()
+                  if node.is_error or node.is_missing:
+                      errors.append(f'{path}:{node.start_point}: {node.type}')
+                  nodes.extend(reversed(node.children))
+          if errors:
+              raise RuntimeError('\n'.join(errors))
+          print(f'PASS: {len(paths)} C# files parsed; no compilation or runtime test performed.')
+      - name: Commit fixes and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Suden'
+          git config user.email '20457922+shudnal@users.noreply.github.com'
+          git add StorePanel.cs TradeInventory.cs tests/Regression/Program.cs docs/reviews/2026-09-07-repository-review.md
+          git rm .github/workflows/address-codex-review.yml
+          git commit -m 'Address Codex trade capacity and offer identity review'
+          git push origin HEAD:refs/heads/fix/trade-focus-stack-dialog-review
