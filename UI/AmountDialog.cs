@@ -112,8 +112,6 @@ namespace TradersExtended
 
             StorePanel.DragHandle.Configure(StorePanel.DragHandle.CreateBackground(dialogBackground), dialogBackground, IsOpen,
                 GetPanelOffset, PreviewPanelOffset, CommitPanelOffset);
-            StorePanel.DragHandle.Configure(sliderTitle.gameObject, dialogBackground, IsOpen,
-                GetPanelOffset, PreviewPanelOffset, CommitPanelOffset);
             SetPanelPosition();
 
             return amountDialog;

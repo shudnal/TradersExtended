@@ -361,8 +361,10 @@ is exhausted, the nearest remaining sell row is selected; an empty sell list doe
 
 ## Moving the store panels
 
-Hold `LeftAlt` and drag a panel background or title with the left mouse button. Both store columns move together;
-the amount dialog can be moved independently. Buttons, list scrolling and the amount slider keep their normal behavior.
+Hold `LeftAlt` and drag anywhere on a panel with the left mouse button, including over filters, item lists and
+buttons. Both store columns move together; the amount dialog can be moved independently. While the key is held,
+mouse gestures move the panel instead of activating the controls underneath. Without the key, buttons, text fields,
+list scrolling and the amount slider keep their normal behavior.
 The key can be changed through `Store UI / Drag key` (`None` disables dragging).
 
 Positions are saved locally as `Store panel offset` and `Amount dialog offset` in the `Store UI` section. They are
@@ -390,27 +392,35 @@ The amount dialog, affordability checks, list icons, sale payouts, buyback, and 
 
 ## Price tooltips
 
-Items with entries in sell configs receive a localized `Value` section in their normal tooltip. The heading uses
-Valheim's `$item_value` token, and quality labels use `$item_quality`. Common prices, including their currency, stack
-and quality where applicable, appear directly after the heading's colon rather than on a separate Common line.
-Without a common price, the heading has no inline amount. Discovered trader-specific values follow on separate lines
-with uncolored trader names. Prices remain base configuration values, before the current flexible-pricing modifier.
+`Item tooltips / Hide vanilla item value` is enabled by default and is local-only. With this setting enabled, an
+item with one applicable common per-item price in Coins and no other price records uses Valheim's native value
+line, including the stack total. The configured price is substituted only while generating the tooltip, and no
+additional price section is appended. Trade lots, alternate currencies and totals outside the native integer range
+use detailed rows so their meaning is not lost in a per-item coin value.
 
-`Item tooltips / Hide vanilla item value` is enabled by default and is local-only. It suppresses the vanilla value
-line for all items, including coins, independently of whether any trader prices are available. The underlying item
-value is restored after tooltip generation, including when generation throws; sale prices are not changed. Disable
-this setting to retain the vanilla value line alongside the trader price section.
+Other items have their original vanilla value line suppressed. Multiple common prices or trader-specific prices
+appear below a colored, localized `$item_value` heading, with one applicable entry per line. Common entries use
+`Currency: amount`; trader entries use `Trader: amount` for Coins or `Trader (Currency): amount` for other currencies.
+Amounts are orange, trader names are uncolored, and configured stack and `$item_quality` details follow the amount.
+Explicit trader entries remain visible even when their prices match a common entry. Inherited common entries are
+not duplicated unless the trader's effective currency differs. Entries without an explicit currency use a discovered
+trader's default, preferring Coins for the common row; differing defaults are shown on the corresponding trader rows.
+
+All displayed prices remain base configuration values, before the current flexible-pricing modifier. The underlying
+item value is restored in the tooltip finalizer, including after exceptions and nested calls; trading is unchanged.
+Items without an available price, including coins, have no value line. Disable `Hide vanilla item value` to keep the
+original vanilla value and show configured prices in the detailed section instead.
 
 Prices are hidden until the corresponding trader's static location icon has been revealed on the map. Before any
-trader is discovered, the entire trader price section is hidden. Automatically generated common values appear in the
-heading when enabled for every discovered trader; otherwise they are shown only for traders whose personal or
-BepInEx settings enable `Add common valuable items to sell list`.
+trader is discovered, neither substituted native values nor detailed prices are shown. Automatically generated
+common values are shared only when enabled for every discovered trader; otherwise they are shown for the traders
+whose settings enable `Add common valuable items to sell list`. Global-key, player-key and quality requirements
+continue to control which price entries apply.
 
 Discovery uses the client's current location-icon list, including icons shared by the server. It does not require the
 trader to be loaded nearby or the map window to be open. The standard Haldor, Hildir and Bog Witch camp icons are
 recognized; a custom trader is recognized by a static location icon named after its trader prefab or `<trader>_camp`.
-
-A trader-specific value is not repeated when its applicable price, stack, and effective currency duplicate an explicit common value. Requirement-gated prices are shown only while their global-key and player-key requirements are met.
+The price cache is initialized at `ZoneSystem.Start` and rebuilt when configuration data changes, not on each tooltip.
 
 ## Discovery
 

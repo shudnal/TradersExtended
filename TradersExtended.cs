@@ -234,7 +234,7 @@ namespace TradersExtended
 
             // Panel placement belongs to the local user, never to server configuration policy.
             storePanelDragKey = Config.Bind("Store UI", "Drag key", new KeyboardShortcut(KeyCode.LeftAlt),
-                "Hold this key and drag a panel background or title with the left mouse button. [Not synchronized with server]");
+                "Hold this key and drag anywhere on a store or amount panel with the left mouse button. [Not synchronized with server]");
             storePanelOffset = Config.Bind("Store UI", "Store panel offset", Vector2.zero,
                 "Local store panel offset from its configured default position. Updated on drag release. [Not synchronized with server]");
             amountDialogOffset = Config.Bind("Store UI", "Amount dialog offset", Vector2.zero,
@@ -245,7 +245,7 @@ namespace TradersExtended
             amountDialogOffset.SettingChanged += delegate { AmountDialog.SetPanelPosition(); };
 
             hideVanillaItemValue = Config.Bind("Item tooltips", "Hide vanilla item value", true,
-                "Hide the vanilla value line in all item tooltips, including coins. Trader price information remains visible for discovered traders. [Not synchronized with server]");
+                "Replace vanilla tooltip values with configured prices for discovered traders. A single common per-item coin price uses the vanilla value line; other prices use separate rows. Hide values for items without an available price, including coins. [Not synchronized with server]");
 
             checkForDiscovery = config("Item discovery", "Sell only discovered items", true, "A trader will not sell items that the buyer has not discovered.");
             checkForDiscoveryIgnoreItems = config("Item discovery", "Undiscovered items list to sell", "", "Comma-separated prefab names that bypass the discovery check. Vanilla trader items are included by default.");

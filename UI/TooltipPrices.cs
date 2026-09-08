@@ -1,9 +1,7 @@
-using BepInEx;
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection.Emit;
 using System.Text;
 using UnityEngine;
 using static TradersExtended.TradersExtended;
@@ -70,8 +68,9 @@ namespace TradersExtended
             }
         }
 
-        private static string GetTooltip(ItemDrop.ItemData itemData, int quality)
+        private static string GetTooltip(ItemDrop.ItemData itemData, int quality, bool useVanillaValue, out int value)
         {
+            value = 0;
             string prefabName = TradeInventory.PrefabName(itemData);
             if (string.IsNullOrEmpty(prefabName) && itemData != null && ObjectDB.instance != null)
                 prefabName = ObjectDB.instance.m_items.FirstOrDefault(prefab => prefab != null &&
@@ -103,15 +102,26 @@ namespace TradersExtended
                 : commonExplicitSource;
             List<PriceInfo> commonPrices = GetEffectivePrices(commonDisplaySource, quality);
 
+            // Use a discovered trader's actual default for entries without an explicit currency.
+            // Prefer Coins as the common baseline; differing defaults are shown on trader-specific rows.
+            string commonTrader = traderNames.OrderBy(name => IsCoinCurrency(ResolvePriceCurrency(null, name)) ? 0 : 1)
+                .ThenBy(name => name, StringComparer.OrdinalIgnoreCase).First();
+            if (useVanillaValue && allPrices.Count == 1 && commonPrices.Count == 1 && commonPrices[0].Stack == 1 &&
+                (long)commonPrices[0].Price * itemData.m_stack <= int.MaxValue &&
+                traderNames.All(name => IsCoinCurrency(ResolvePriceCurrency(commonPrices[0], name))))
+            {
+                // Native Value means an integer per-item coin value and multiplies it by the inventory stack.
+                // Lots and alternate currencies need explicit rows rather than an ambiguous native total.
+                value = commonPrices[0].Price;
+                return string.Empty;
+            }
+
             StringBuilder result = new StringBuilder();
             result.Append("\n\n<color=#ffcc66>")
                 .Append(Localization.instance?.Localize("$item_value") ?? "$item_value").Append("</color>");
             bool hasPrices = commonPrices.Count > 0;
-            if (hasPrices)
-            {
-                hasPrices = true;
-                AppendPriceLine(result, string.Empty, commonPrices, string.Empty);
-            }
+            foreach (PriceInfo price in commonPrices)
+                AppendPriceLine(result, null, price, ResolvePriceCurrency(price, commonTrader));
 
             foreach (string traderName in traderNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase))
             {
@@ -123,16 +133,16 @@ namespace TradersExtended
                 if (traderSpecificSource != null)
                     effectiveSource = effectiveSource.Concat(traderSpecificSource);
 
-                List<PriceInfo> effectivePrices = GetEffectivePrices(effectiveSource, quality)
-                    .Where(price => !commonPrices.Any(common => SamePrice(common, price, traderName)))
-                    .ToList();
-                if (effectivePrices.Count == 0)
-                    continue;
+                foreach (PriceInfo price in GetEffectivePrices(effectiveSource, quality))
+                {
+                    ItemDrop currency = ResolvePriceCurrency(price, traderName);
+                    // Suppress only inherited common entries, not explicit trader records with the same price.
+                    if (commonPrices.Contains(price) && currency == ResolvePriceCurrency(price, commonTrader))
+                        continue;
 
-                hasPrices = true;
-                string label = LocalizeTraderName(traderName);
-                string currency = TraderCurrency.GetConfiguredCurrencyName(traderName);
-                AppendPriceLine(result, label, effectivePrices, currency);
+                    hasPrices = true;
+                    AppendPriceLine(result, LocalizeTraderName(traderName), price, currency);
+                }
             }
 
             return hasPrices ? result.ToString() : string.Empty;
@@ -165,16 +175,21 @@ namespace TradersExtended
             }
         }
 
-        private static bool SamePrice(PriceInfo left, PriceInfo right, string trader)
+        private static ItemDrop ResolvePriceCurrency(PriceInfo price, string trader)
         {
-            if (left.Price != right.Price || left.Stack != right.Stack)
-                return false;
+            if (!string.IsNullOrWhiteSpace(price?.CurrencyPrefab) && ObjectDB.instance != null)
+            {
+                GameObject prefab = ObjectDB.instance.GetItemPrefab(price.CurrencyPrefab.Trim());
+                if (prefab != null && prefab.TryGetComponent(out ItemDrop currency))
+                    return currency;
+            }
 
-            string traderCurrency = TraderCurrency.GetTraderCurrencyPrefabName(trader);
-            string leftCurrency = string.IsNullOrWhiteSpace(left.CurrencyPrefab) ? traderCurrency : left.CurrencyPrefab.Trim();
-            string rightCurrency = string.IsNullOrWhiteSpace(right.CurrencyPrefab) ? traderCurrency : right.CurrencyPrefab.Trim();
-            return string.Equals(leftCurrency, rightCurrency, StringComparison.OrdinalIgnoreCase);
+            return TraderCurrency.GetCurrency(TraderCurrency.GetTraderCurrencyPrefabName(trader), null) ??
+                TraderCurrency.GetCurrency(CoinsPatches.itemNameCoins, null);
         }
+
+        private static bool IsCoinCurrency(ItemDrop currency) =>
+            currency != null && Utils.GetPrefabName(currency.gameObject) == CoinsPatches.itemNameCoins;
 
         private static List<PriceInfo> GetEffectivePrices(IEnumerable<PriceInfo> prices, int quality)
         {
@@ -198,43 +213,25 @@ namespace TradersExtended
                 .ToList();
         }
 
-        private static void AppendPriceLine(StringBuilder result, string label, List<PriceInfo> prices, string currency)
+        private static void AppendPriceLine(StringBuilder result, string trader, PriceInfo price, ItemDrop currency)
         {
-            if (prices == null || prices.Count == 0)
-                return;
-
+            string currencyName = TraderCurrency.GetCurrencyName(currency);
             result.Append('\n');
-
-            if (!string.IsNullOrWhiteSpace(label))
-                result.Append(label).Append(": ");
-
-            AppendPrices(result, prices, currency);
-        }
-
-        private static void AppendPrices(StringBuilder result, List<PriceInfo> prices, string currency)
-        {
-            for (int i = 0; i < prices.Count; i++)
+            if (string.IsNullOrEmpty(trader))
+                result.Append(currencyName);
+            else
             {
-                if (i > 0)
-                    result.Append(", ");
-
-                PriceInfo price = prices[i];
-                result.Append(price.Price);
-                string effectiveCurrency = currency;
-                if (!string.IsNullOrWhiteSpace(price.CurrencyPrefab))
-                {
-                    string configuredCurrency = TraderCurrency.GetCurrencyName(price.CurrencyPrefab);
-                    if (!string.IsNullOrEmpty(configuredCurrency))
-                        effectiveCurrency = configuredCurrency;
-                }
-                if (!string.IsNullOrEmpty(effectiveCurrency) && effectiveCurrency != CoinsPatches.itemDropNameCoins)
-                    result.Append(' ').Append(effectiveCurrency);
-                if (price.Stack > 1)
-                    result.Append(" / x").Append(price.Stack);
-                if (price.Quality > 0)
-                    result.Append(" (").Append(Localization.instance?.Localize("$item_quality") ?? "$item_quality")
-                        .Append(' ').Append(price.Quality).Append(')');
+                result.Append(trader);
+                if (!IsCoinCurrency(currency))
+                    result.Append(" (").Append(currencyName).Append(')');
             }
+
+            result.Append(": <color=orange>").Append(price.Price).Append("</color>");
+            if (price.Stack > 1)
+                result.Append(" / x").Append(price.Stack);
+            if (price.Quality > 0)
+                result.Append(" (").Append(Localization.instance?.Localize("$item_quality") ?? "$item_quality")
+                    .Append(' ').Append(price.Quality).Append(')');
         }
 
         private static string LocalizeTraderName(string trader)
@@ -247,7 +244,7 @@ namespace TradersExtended
         }
 
         [HarmonyPatch(typeof(ZoneSystem), nameof(ZoneSystem.Start))]
-        private static class ZoneSystem_Awake_RebuildTooltipPrices
+        private static class ZoneSystem_Start_RebuildTooltipPrices
         {
             [HarmonyPriority(Priority.Last)]
             private static void Postfix() => Rebuild();
@@ -260,19 +257,25 @@ namespace TradersExtended
             {
                 internal ItemDrop.ItemData.SharedData SharedData;
                 internal int Value;
+                internal string Tooltip;
             }
 
             [HarmonyPriority(Priority.Last)]
-            private static void Prefix(ItemDrop.ItemData __0, out ItemValueState __state)
+            private static void Prefix(ItemDrop.ItemData __0, int __1, out ItemValueState __state)
             {
                 __state = default;
-                if (hideVanillaItemValue?.Value != true || __0?.m_shared == null)
+                if (__0?.m_shared == null)
+                    return;
+
+                bool replaceValue = hideVanillaItemValue?.Value == true;
+                __state.Tooltip = GetTooltip(__0, __1, replaceValue, out int value);
+                if (!replaceValue)
                     return;
 
                 // Retain the exact shared object and value for this call, including nested tooltip calls.
                 __state.SharedData = __0.m_shared;
                 __state.Value = __state.SharedData.m_value;
-                __state.SharedData.m_value = 0;
+                __state.SharedData.m_value = value;
             }
 
             private static void Finalizer(ref ItemValueState __state)
@@ -285,11 +288,10 @@ namespace TradersExtended
                 __state = default;
             }
 
-            private static void Postfix(ItemDrop.ItemData __0, int __1, ref string __result)
+            private static void Postfix(ItemValueState __state, ref string __result)
             {
-                string prices = GetTooltip(__0, __1);
-                if (!string.IsNullOrEmpty(prices))
-                    __result += prices;
+                if (!string.IsNullOrEmpty(__state.Tooltip))
+                    __result += __state.Tooltip;
             }
         }
     }

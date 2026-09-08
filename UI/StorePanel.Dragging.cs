@@ -35,10 +35,8 @@ namespace TradersExtended
         {
             RectTransform root = store.m_rootPanel.GetComponent<RectTransform>();
             GameObject background = DragHandle.CreateBackground(root, root.Find("border (1)") as RectTransform);
-            foreach (Transform handle in new[] { background.transform, root.Find("bkg"), storeName.transform, playerName.transform })
-                if (handle != null)
-                    DragHandle.Configure(handle.gameObject, root, () => IsOpen() && !AmountDialog.IsOpen(),
-                        GetStorePanelOffset, PreviewStorePanelOffset, CommitStorePanelOffset);
+            DragHandle.Configure(background, root, () => IsOpen() && !AmountDialog.IsOpen(),
+                GetStorePanelOffset, PreviewStorePanelOffset, CommitStorePanelOffset);
         }
 
         private static void PreparePanelPositionsForOpen(StoreGui store)
@@ -56,10 +54,11 @@ namespace TradersExtended
             }
         }
 
-        // Pointer drag handling follows ExtraSlots' equipment panel behavior. This helper is shared
-        // by store and amount panels; child buttons, list scrolling and sliders retain their own input.
+        // The topmost surface captures modifier-held gestures across the entire panel, including controls.
+        // Without the modifier its raycast filter lets buttons, filters, scrolling and sliders receive input.
         [DisallowMultipleComponent]
-        internal sealed class DragHandle : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+        internal sealed class DragHandle : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler,
+            IPointerDownHandler, IPointerUpHandler, ICanvasRaycastFilter
         {
             private RectTransform target;
             private RectTransform movementSpace;
@@ -73,12 +72,12 @@ namespace TradersExtended
 
             internal static GameObject CreateBackground(RectTransform parent, RectTransform template = null)
             {
-                // A leaf raycast surface behind controls avoids making their container a drag handler.
+                // Keep the surface above controls; IsRaycastLocationValid makes it transparent to normal input.
                 GameObject background = new GameObject("PanelDragBackground", typeof(RectTransform), typeof(Image));
                 background.layer = parent.gameObject.layer;
                 RectTransform rect = background.GetComponent<RectTransform>();
                 rect.SetParent(parent, false);
-                rect.SetAsFirstSibling();
+                rect.SetAsLastSibling();
                 if (template != null)
                 {
                     rect.anchorMin = template.anchorMin;
@@ -126,6 +125,16 @@ namespace TradersExtended
                 return true;
             }
 
+            public bool IsRaycastLocationValid(Vector2 screenPoint, Camera eventCamera) => dragging || CanDrag();
+
+            public void OnPointerDown(PointerEventData eventData)
+            {
+                // Own modifier-held presses even before the drag threshold is crossed.
+                eventData.eligibleForClick = false;
+            }
+
+            public void OnPointerUp(PointerEventData eventData) => FinishDrag();
+
             public void OnBeginDrag(PointerEventData eventData)
             {
                 if (dragging || eventData.button != PointerEventData.InputButton.Left ||
@@ -134,7 +143,7 @@ namespace TradersExtended
 
                 dragging = true;
                 rawOffset = FinitePanelOffset(getOffset());
-                // Titles can have a different parent than the panel they move.
+                // Measure motion in the moved panel's parent, not in the overlay's coordinates.
                 movementSpace = target.parent as RectTransform;
                 canvasScale = target.GetComponentInParent<Canvas>()?.scaleFactor ?? 1f;
                 if (canvasScale <= 0f || float.IsNaN(canvasScale) || float.IsInfinity(canvasScale))

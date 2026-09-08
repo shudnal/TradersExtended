@@ -6,9 +6,9 @@
 * hidden trader price tooltips until the corresponding trader is discovered on the map
 * amount dialogs now require multiple available trade lots and show the current discount or markup
 * rounded sale prices down consistently in the list, amount preview and payment
-* added key-held dragging for the store and amount panels, with local offsets and an optional reset on store opening
-* localized item value and quality labels, with common prices displayed directly in the value heading
-* added an enabled-by-default local option to hide vanilla item value lines, including coin values
+* added key-held dragging anywhere on the store and amount panels, with local offsets and an optional reset on store opening
+* localized item value and quality labels, with one detailed price entry per line and currency-aware labels
+* added an enabled-by-default local option to replace vanilla item values, using the native line for single common per-item coin prices and hiding unavailable values, including coins
 
 # 2.0.0
 * added an in-game editor for trader settings and item lists, including dedicated-server administration, scalable windows and configurable gameplay input blocking
