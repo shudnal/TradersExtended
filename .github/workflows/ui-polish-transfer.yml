@@ -15,28 +15,19 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Export source and reference text without executing it
+      - name: Export public sources without executing them
         shell: python
         run: |
-          import json, pathlib, subprocess, urllib.request, zipfile
+          import subprocess, urllib.request, zipfile
           with zipfile.ZipFile('/tmp/trader-ui-source.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
               for path in subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0'):
                   if path:
                       archive.write(path, 'repository/' + path)
-              sources = {
-                  'ExtraSlots': ('shudnal/ExtraSlots', 'b3b703a97a44c899e83fc80314373ce45f98a9b0', ['UIDragging.cs', 'EquipmentPanel.cs', 'ExtraSlots.cs']),
-                  'Valheim': ('shudnal/assemblies_combined', 'master', ['assembly_valheim/Minimap.cs', 'assembly_valheim/ZoneSystem.cs', 'assembly_valheim/Trader.cs', 'assembly_valheim/StoreGui.cs', 'assembly_valheim/InventoryGui.cs', 'assembly_valheim/Inventory.cs'])
-              }
-              for label, (repo, ref, files) in sources.items():
-                  if ref == 'master':
-                      request = urllib.request.Request(f'https://api.github.com/repos/{repo}/commits/master', headers={'User-Agent': 'source-inspection'})
-                      with urllib.request.urlopen(request, timeout=30) as response:
-                          ref = json.load(response)['sha']
-                  archive.writestr(f'references/{label}/SOURCE.txt', f'{repo}\n{ref}\n')
-                  for path in files:
-                      with urllib.request.urlopen(f'https://raw.githubusercontent.com/{repo}/{ref}/{path}', timeout=30) as response:
-                          archive.writestr(f'references/{label}/{path}', response.read())
-          print('Exported source only; no build, test or publishing command executed.')
+              ref = 'b3b703a97a44c899e83fc80314373ce45f98a9b0'
+              for path in ['UIDragging.cs', 'EquipmentPanel.cs', 'ExtraSlots.cs']:
+                  with urllib.request.urlopen(f'https://raw.githubusercontent.com/shudnal/ExtraSlots/{ref}/{path}', timeout=30) as response:
+                      archive.writestr(f'references/ExtraSlots/{path}', response.read())
+          print('Exported public source only; no game references, build, test or publishing commands.')
       - uses: actions/upload-artifact@v4
         with:
           name: trader-ui-source
