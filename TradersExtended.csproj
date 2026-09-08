@@ -113,31 +113,29 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="TradeAmounts.cs" />
-    <Compile Include="TradeInventory.cs" />
-    <Compile Include="TradeSelection.cs" />
-    <Compile Include="ConfigPersistence.cs" />
-    <Compile Include="CsvRecords.cs" />
-    <Compile Include="EditorTransferBuffer.cs" />
-    <Compile Include="AmountDialog.cs" />
-    <Compile Include="BuybackManager.cs" />
-    <Compile Include="CoinsPatches.cs" />
-    <Compile Include="ConfigEditor.cs" />
-    <Compile Include="ConfigEditorData.cs" />
-    <Compile Include="ConfigEditorGuiScale.cs" />
-    <Compile Include="ConfigEditorTheme.cs" />
-    <Compile Include="ConfigEditorInput.cs" />
-    <Compile Include="ConfigEditorTransport.cs" />
     <Compile Include="Compatibility\EpicLootCompat.cs" />
-    <Compile Include="StorePanel.cs" />
-    <Compile Include="RepairPanel.cs" />
-    <Compile Include="TradeableItem.cs" />
-    <Compile Include="TraderCoins.cs" />
-    <Compile Include="TraderCurrency.cs" />
-    <Compile Include="TooltipPrices.cs" />
-    <Compile Include="TraderConfig.cs" />
-    <Compile Include="TradersExtended.cs" />
+    <Compile Include="Configuration\Editor\ConfigEditor.cs" />
+    <Compile Include="Configuration\Editor\ConfigEditorAppearance.cs" />
+    <Compile Include="Configuration\Editor\ConfigEditorData.cs" />
+    <Compile Include="Configuration\Editor\ConfigEditorInput.cs" />
+    <Compile Include="Configuration\Editor\ConfigEditorTransport.cs" />
+    <Compile Include="Configuration\TraderConfig.cs" />
+    <Compile Include="ItemLists\ItemConfigFiles.cs" />
+    <Compile Include="ItemLists\StorePanel.Lists.cs" />
+    <Compile Include="ItemLists\TradeableItem.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TradersExtended.cs" />
+    <Compile Include="Trading\BuybackManager.cs" />
+    <Compile Include="Trading\CoinsPatches.cs" />
+    <Compile Include="Trading\StorePanel.Trading.cs" />
+    <Compile Include="Trading\TradeAmounts.cs" />
+    <Compile Include="Trading\TradeInventory.cs" />
+    <Compile Include="Trading\TraderCoins.cs" />
+    <Compile Include="Trading\TraderCurrency.cs" />
+    <Compile Include="UI\AmountDialog.cs" />
+    <Compile Include="UI\RepairPanel.cs" />
+    <Compile Include="UI\StorePanel.cs" />
+    <Compile Include="UI\TooltipPrices.cs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Libs\AzuExtendedPlayerInventoryAPI.dll">

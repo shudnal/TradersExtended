@@ -11,7 +11,7 @@ using static TradersExtended.TradersExtended;
 
 namespace TradersExtended
 {
-    internal sealed class ConfigEditor : IDisposable
+    internal sealed partial class ConfigEditor : IDisposable
     {
         private const int WindowId = 924617;
         private const int NewFileWindowId = 924618;
@@ -59,8 +59,8 @@ namespace TradersExtended
         private long targetRevision;
         private bool targetChanged;
         private readonly ConfigEditorCursor cursor = new ConfigEditorCursor();
-        private readonly ConfigEditorGuiScale scale = new ConfigEditorGuiScale();
-        private readonly ConfigEditorTheme theme = new ConfigEditorTheme();
+        private readonly GuiScale scale = new GuiScale();
+        private readonly Theme theme = new Theme();
         private readonly Dictionary<string, string> traderDisplayNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private readonly List<ItemOption> itemOptions = new List<ItemOption>();
         private readonly Dictionary<string, ItemOption> itemOptionsByPrefab = new Dictionary<string, ItemOption>(StringComparer.OrdinalIgnoreCase);
@@ -713,7 +713,7 @@ namespace TradersExtended
             GUILayout.Label(activeTitle, pickerNameStyle, GUILayout.ExpandWidth(false), GUILayout.Height(headerControlHeight));
             GUILayout.FlexibleSpace();
 
-            bool blockInput = ConfigEditorGui.ToggleLayout(
+            bool blockInput = Controls.ToggleLayout(
                 theme,
                 configEditorBlockGameInput?.Value == true,
                 new GUIContent("Prevent input", "Block all Valheim gameplay input while the configuration editor is open."),
@@ -903,7 +903,7 @@ namespace TradersExtended
             ItemRowAction action = ItemRowAction.None;
 
             GUILayout.BeginHorizontal(itemRowStyle, GUILayout.Height(CompactRowHeight));
-            bool selected = ConfigEditorGui.ToggleLayout(theme, row.Selected, GUIContent.none, 22f, mutedStyle, 0f);
+            bool selected = Controls.ToggleLayout(theme, row.Selected, GUIContent.none, 22f, mutedStyle, 0f);
             if (selected != row.Selected)
                 row.Selected = selected;
             ItemColumnGap();
@@ -1063,7 +1063,7 @@ namespace TradersExtended
         private void DrawItemColumnToggle(ItemSortColumn column, string label, float width)
         {
             bool visible = IsItemColumnVisible(column);
-            bool changed = ConfigEditorGui.ToggleLayout(theme, visible, new GUIContent(label), width, singleLineMutedStyle, 0f, 22f);
+            bool changed = Controls.ToggleLayout(theme, visible, new GUIContent(label), width, singleLineMutedStyle, 0f, 22f);
             if (changed != visible)
                 SetItemColumnVisible(column, changed);
         }
@@ -1086,7 +1086,7 @@ namespace TradersExtended
             bool inheritedEnabled = GUI.enabled;
             GUILayout.BeginVertical(rowStyle);
             GUILayout.BeginHorizontal();
-            bool hasOverride = ConfigEditorGui.ToggleLayout(theme, state.HasOverride, GUIContent.none, 22f, mutedStyle, 0f);
+            bool hasOverride = Controls.ToggleLayout(theme, state.HasOverride, GUIContent.none, 22f, mutedStyle, 0f);
             if (hasOverride != state.HasOverride)
             {
                 state.HasOverride = hasOverride;
@@ -1125,7 +1125,7 @@ namespace TradersExtended
                 case TraderSettingType.Boolean:
                 {
                     bool current = state.Value is bool boolean && boolean;
-                    bool changed = ConfigEditorGui.ToggleLayout(theme, current, new GUIContent(current ? "Enabled" : "Disabled"), 150f);
+                    bool changed = Controls.ToggleLayout(theme, current, new GUIContent(current ? "Enabled" : "Disabled"), 150f);
                     if (changed != current)
                     {
                         state.Value = changed;
@@ -1350,7 +1350,7 @@ namespace TradersExtended
                 DrawItemPickerSortButton("Prefab", ItemPickerSortColumn.Prefab, 70f);
                 DrawItemPickerSortButton("Name", ItemPickerSortColumn.LocalizedName, 64f);
                 GUILayout.Space(3f);
-                bool showAll = ConfigEditorGui.ToggleLayout(theme, configEditorShowAllItems?.Value == true,
+                bool showAll = Controls.ToggleLayout(theme, configEditorShowAllItems?.Value == true,
                     new GUIContent("Show all", "Include AI equipment and items without a normal user-facing name, description or icon."), 70f,
                     singleLineMutedStyle, 0f);
                 if (configEditorShowAllItems != null && showAll != configEditorShowAllItems.Value)
@@ -1491,7 +1491,7 @@ namespace TradersExtended
                 float toggleSize = theme.CompactToggleSize;
                 Rect toggleRect = new Rect(rowRect.x + 4f, rowRect.y + Mathf.Max(0f, (rowRect.height - toggleSize) * 0.5f), toggleSize, toggleSize);
                 bool selected = globalKeySelection.Contains(key);
-                bool changed = ConfigEditorGui.Toggle(theme, toggleRect, selected, GUIContent.none, keyNameStyle, 0f);
+                bool changed = Controls.Toggle(theme, toggleRect, selected, GUIContent.none, keyNameStyle, 0f);
                 if (changed && !selected)
                     globalKeySelection.Add(key);
                 else if (!changed && selected)

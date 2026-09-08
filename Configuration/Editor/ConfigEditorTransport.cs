@@ -27,11 +27,11 @@ namespace TradersExtended
         private const string ProgressRpc = RequestRpc + ".Progress";
         private const string RequestChunkRpc = RequestRpc + ".Chunk";
         private const string ResponseChunkRpc = ResponseRpc + ".Chunk";
-        private static readonly Dictionary<ZRpc, EditorTransferBuffer> incomingRequests = new Dictionary<ZRpc, EditorTransferBuffer>();
-        private static EditorTransferBuffer incomingResponse;
+        private static readonly Dictionary<ZRpc, TransferBuffer> incomingRequests = new Dictionary<ZRpc, TransferBuffer>();
+        private static TransferBuffer incomingResponse;
         internal static event Action TransferProgress;
         private const int CorrelationMarker = 0x54454332;
-        private const int MaximumPackageBytes = ConfigPersistence.MaximumFileBytes + 8192;
+        private const int MaximumPackageBytes = Persistence.MaximumFileBytes + 8192;
         private const float RequestTimeoutSeconds = 15f;
 
         private enum RemoteAdminAccessState
@@ -403,15 +403,15 @@ namespace TradersExtended
 
         private static void SendPackage(ZRpc rpc, string method, string chunkMethod, ZPackage package, ConfigEditorOperation operation, long id)
         {
-            if (package.Size() <= EditorTransferBuffer.ChunkBytes)
+            if (package.Size() <= TransferBuffer.ChunkBytes)
             {
                 rpc.Invoke(method, package);
                 return;
             }
             byte[] bytes = package.GetArray();
-            for (int offset = 0; offset < bytes.Length; offset += EditorTransferBuffer.ChunkBytes)
+            for (int offset = 0; offset < bytes.Length; offset += TransferBuffer.ChunkBytes)
             {
-                int count = Math.Min(EditorTransferBuffer.ChunkBytes, bytes.Length - offset);
+                int count = Math.Min(TransferBuffer.ChunkBytes, bytes.Length - offset);
                 byte[] chunk = new byte[count];
                 Buffer.BlockCopy(bytes, offset, chunk, 0, count);
                 ZPackage part = new ZPackage();
@@ -426,7 +426,7 @@ namespace TradersExtended
 
         private static byte[] ReadChunk(ZPackage package, out long id, out int operation, out int length, out int offset)
         {
-            if (package == null || package.Size() < 25 || package.Size() > EditorTransferBuffer.ChunkBytes + 24)
+            if (package == null || package.Size() < 25 || package.Size() > TransferBuffer.ChunkBytes + 24)
                 throw new InvalidDataException("Invalid configuration transfer chunk size.");
             id = package.ReadLong();
             operation = package.ReadInt();
@@ -434,7 +434,7 @@ namespace TradersExtended
             offset = package.ReadInt();
             int countPosition = package.GetPos();
             int count = package.ReadInt();
-            if (count <= 0 || count > EditorTransferBuffer.ChunkBytes || count != package.Size() - package.GetPos())
+            if (count <= 0 || count > TransferBuffer.ChunkBytes || count != package.Size() - package.GetPos())
                 throw new InvalidDataException("Invalid configuration transfer chunk payload.");
             package.SetPos(countPosition);
             return package.ReadByteArray();
@@ -454,11 +454,11 @@ namespace TradersExtended
                     .Select(pair => pair.Key).ToList())
                     incomingRequests.Remove(expired);
                 if (offset == 0)
-                    incomingRequests[sender] = new EditorTransferBuffer(id, operation, length, MaximumPackageBytes, now);
-                if (!incomingRequests.TryGetValue(sender, out EditorTransferBuffer transfer))
+                    incomingRequests[sender] = new TransferBuffer(id, operation, length, MaximumPackageBytes, now);
+                if (!incomingRequests.TryGetValue(sender, out TransferBuffer transfer))
                     return;
                 byte[] completed = transfer.Add(id, operation, length, offset, chunk, now);
-                if (offset % (EditorTransferBuffer.ChunkBytes * 8) == 0)
+                if (offset % (TransferBuffer.ChunkBytes * 8) == 0)
                 {
                     ZPackage progress = new ZPackage();
                     progress.Write(id);
@@ -503,7 +503,7 @@ namespace TradersExtended
                     return;
                 float now = Time.realtimeSinceStartup;
                 if (offset == 0)
-                    incomingResponse = new EditorTransferBuffer(id, operation, length, MaximumPackageBytes, now);
+                    incomingResponse = new TransferBuffer(id, operation, length, MaximumPackageBytes, now);
                 if (incomingResponse == null)
                     return;
                 byte[] completed = incomingResponse.Add(id, operation, length, offset, chunk, now);
@@ -564,7 +564,7 @@ namespace TradersExtended
                         if (!File.Exists(path))
                             throw new FileNotFoundException("The selected configuration file no longer exists.", fileName);
 
-                        string fileContent = ConfigPersistence.ReadBounded(path);
+                        string fileContent = Persistence.ReadBounded(path);
 
                         responder(operation, true, fileName, "Configuration loaded.", fileContent);
                         break;
@@ -575,12 +575,12 @@ namespace TradersExtended
                         string path = GetSafePath(fileName);
                         if (operation == ConfigEditorOperation.Create && File.Exists(path))
                             throw new IOException("A configuration file with this name already exists.");
-                        if (Encoding.UTF8.GetByteCount(content ?? string.Empty) > ConfigPersistence.MaximumFileBytes)
+                        if (Encoding.UTF8.GetByteCount(content ?? string.Empty) > Persistence.MaximumFileBytes)
                             throw new InvalidDataException("The configuration exceeds the 8 MiB editor file limit.");
                         if (!ConfigEditorSerialization.Validate(fileName, content, out string validationError))
                             throw new InvalidDataException(validationError);
 
-                        ConfigPersistence.WriteAtomically(path, content, operation == ConfigEditorOperation.Create);
+                        Persistence.WriteAtomically(path, content, operation == ConfigEditorOperation.Create);
                         if (!TradersExtended.ReadConfigs())
                             throw new InvalidOperationException("The file was saved, but configuration reload failed. The previous runtime configuration remains active; check the server log.");
                         string message = operation == ConfigEditorOperation.Create
@@ -674,14 +674,97 @@ namespace TradersExtended
         {
             ResponseReceived?.Invoke(operation, success, fileName ?? string.Empty, message ?? string.Empty, payload ?? string.Empty);
         }
-    }
 
-    [HarmonyPatch(typeof(ZNet), nameof(ZNet.OnNewConnection))]
-    internal static class ZNet_OnNewConnection_RegisterConfigEditorRpc
-    {
-        private static void Postfix(ZNetPeer peer)
+        /// <summary>One bounded, ordered reliable-RPC transfer. Authorization belongs to the connection handler.</summary>
+        private sealed class TransferBuffer
         {
-            ConfigEditorTransport.RegisterRpc(peer);
+            internal const int ChunkBytes = 32 * 1024;
+            private readonly byte[] bytes;
+            private int nextOffset;
+            internal readonly long Id;
+            internal readonly int Operation;
+            internal float LastActivity;
+
+            internal TransferBuffer(long id, int operation, int length, int maximumBytes, float now)
+            {
+                if (id <= 0 || length <= 0 || length > maximumBytes)
+                    throw new InvalidDataException("Invalid configuration transfer length or ID.");
+                Id = id;
+                Operation = operation;
+                bytes = new byte[length];
+                LastActivity = now;
+            }
+
+            internal byte[] Add(long id, int operation, int length, int offset, byte[] chunk, float now)
+            {
+                if (id != Id || operation != Operation || length != bytes.Length || chunk == null ||
+                    chunk.Length == 0 || chunk.Length > ChunkBytes || offset != nextOffset ||
+                    chunk.Length > bytes.Length - nextOffset)
+                    throw new InvalidDataException("Invalid or out-of-order configuration transfer chunk.");
+                Buffer.BlockCopy(chunk, 0, bytes, nextOffset, chunk.Length);
+                nextOffset += chunk.Length;
+                LastActivity = now;
+                return nextOffset == bytes.Length ? bytes : null;
+            }
+        }
+
+        private static class Persistence
+        {
+            internal const int MaximumFileBytes = 8 * 1024 * 1024;
+
+            internal static string ReadBounded(string path)
+            {
+                using (FileStream source = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                using (MemoryStream content = new MemoryStream())
+                {
+                    byte[] buffer = new byte[8192];
+                    int count;
+                    while ((count = source.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        if (content.Length + count > MaximumFileBytes)
+                            throw new InvalidDataException("The configuration exceeds the 8 MiB editor file limit.");
+                        content.Write(buffer, 0, count);
+                    }
+                    content.Position = 0;
+                    using (StreamReader reader = new StreamReader(content, Encoding.UTF8, true))
+                        return reader.ReadToEnd();
+                }
+            }
+
+            internal static void WriteAtomically(string path, string content, bool create)
+            {
+                byte[] bytes = new UTF8Encoding(false).GetBytes(content ?? string.Empty);
+                if (bytes.Length > MaximumFileBytes)
+                    throw new InvalidDataException("The configuration exceeds the 8 MiB editor file limit.");
+                string temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                try
+                {
+                    using (FileStream stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    {
+                        stream.Write(bytes, 0, bytes.Length);
+                        stream.Flush(true);
+                    }
+                    if (create)
+                        File.Move(temporaryPath, path); // Fails rather than overwriting a concurrently created file.
+                    else
+                        File.Replace(temporaryPath, path, null); // Never truncate or recreate a deleted original.
+                }
+                finally
+                {
+                    try { if (File.Exists(temporaryPath)) File.Delete(temporaryPath); }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(ZNet), nameof(ZNet.OnNewConnection))]
+        private static class ZNet_OnNewConnection_RegisterConfigEditorRpc
+        {
+            private static void Postfix(ZNetPeer peer)
+            {
+                ConfigEditorTransport.RegisterRpc(peer);
+            }
         }
     }
 }

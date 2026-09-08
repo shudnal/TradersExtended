@@ -411,6 +411,20 @@ namespace TradersExtended
 
     internal static class ConfigEditorSerialization
     {
+        // YamlDotNet must receive plain CLR data, not Newtonsoft's JToken implementation objects.
+        private static object ToPlainData(JToken token)
+        {
+            if (token == null || token.Type == JTokenType.Null)
+                return null;
+            if (token is JObject map)
+                return map.Properties().ToDictionary(property => property.Name, property => ToPlainData(property.Value));
+            if (token is JArray list)
+                return list.Select(ToPlainData).ToList();
+            if (token is JValue value)
+                return value.Value;
+            throw new InvalidDataException("Unsupported configuration value.");
+        }
+
         private static readonly string[] CsvHeaders =
         {
             nameof(TradeableItem.prefab),
@@ -466,7 +480,7 @@ namespace TradersExtended
 
             if (extension == ".yaml" || extension == ".yml")
             {
-                object plain = ConfigPersistence.ToPlainData(root ?? new JObject());
+                object plain = ToPlainData(root ?? new JObject());
                 ISerializer serializer = new SerializerBuilder().DisableAliases().Build();
                 return serializer.Serialize(plain);
             }
