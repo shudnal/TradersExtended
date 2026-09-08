@@ -28,7 +28,7 @@ namespace TradersExtended
     {
         public const string pluginID = "shudnal.TradersExtended";
         public const string pluginName = "Traders Extended";
-        public const string pluginVersion = "2.0.0";
+        public const string pluginVersion = "2.0.1";
 
         internal const string DefaultEditorGlobalKeys = "defeated_bonemass,defeated_gdking,defeated_goblinking,defeated_dragon,defeated_eikthyr,defeated_queen,defeated_fader,defeated_serpent,KilledTroll,killed_surtling,KilledBat,Hildir1,Hildir2,Hildir3";
         internal const string DefaultEditorPlayerKeys = "GP_Eikthyr,GP_TheElder,GP_Bonemass,GP_Moder,GP_Yagluth,GP_Queen,GP_Fader";

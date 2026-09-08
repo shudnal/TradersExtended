@@ -1,4 +1,4 @@
-# Unreleased
+# 2.0.1
 * fixed the sell list losing selection after a sale
 * added whole-stack and multi-stack purchases and sales through the amount dialog
 * improved transaction safety, saved buyback items and configuration reload reliability

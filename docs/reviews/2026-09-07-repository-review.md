@@ -6,7 +6,7 @@ Review completed on 2026-09-08.
 
 Reviewed master `54e017fe8b40fa3d6feb0a4fc68713a410063bfb`. Changes are confined to
 `fix/trade-focus-stack-dialog-review`; the existing user discussion is intentionally not linked or modified.
-The package/mod version remains `2.0.0`. No generated distribution DLL or ZIP is claimed to be rebuilt by this change.
+The package/mod release version for this change is `2.0.1`. No generated distribution DLL or ZIP is claimed to be rebuilt by this change.
 
 The review covers all 19 original C# files, the project/reference and ILRepack setup, both manual publishing scripts,
 manifest update scripts, README/config examples, and distribution metadata. Game-facing assumptions were checked first

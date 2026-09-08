@@ -1,7 +1,7 @@
 {
     "name":  "TradersExtended",
     "description":  "CCS migration, JSON/YAML configs, per-trader and per-item currencies, price tooltips, non-teleportable markers, CSV export, and fixes.",
-    "version":  "2.0.0",
+    "version":  "2.0.1",
     "file_category":  "main",
     "allow_mod_manager_download":  true,
     "show_requirements_pop_up":  false,

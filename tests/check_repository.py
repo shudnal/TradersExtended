@@ -45,7 +45,7 @@ for path in root.rglob('*'):
     text_files += 1
 manifest = json.loads((root / 'package/thunderstore/TradersExtended/manifest.json').read_text())
 assert not any('YamlDotNet' in dependency for dependency in manifest['dependencies'])
-assert manifest['version_number'] == '2.0.0'
+assert manifest['version_number'] == '2.0.1'
 transport = (root / 'ConfigEditorTransport.cs').read_text()
 assert 'InvokeRoutedRPC' not in transport and 'LocalPlayerIsAdminOrHost' not in transport
 assert 'GetPeer(sender)' in transport and 'peer.m_socket.GetHostName()' in transport
