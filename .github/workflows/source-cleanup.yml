@@ -1,0 +1,27 @@
+name: Temporary source cleanup export
+on:
+  push:
+    branches: [fix/trade-focus-stack-dialog-review]
+    paths: ['.github/workflows/source-cleanup.yml']
+permissions:
+  contents: read
+jobs:
+  export:
+    if: github.repository == 'shudnal/TradersExtended'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Export tracked sources without building or running the mod
+        run: |
+          git archive --format=zip HEAD -o /tmp/cleanup-sources.zip
+          git rev-parse HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cleanup-sources
+          path: /tmp/cleanup-sources.zip
+          retention-days: 1
+          if-no-files-found: error
