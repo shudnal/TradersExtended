@@ -30,6 +30,7 @@ Traders Extended adds trader-specific and common buy/sell lists, a two-column st
 - BepInEx Pack for Valheim
 - Conditional Config Sync
 - Json.NET
+- YamlDotNet
 
 A Thunderstore-compatible mod manager installs these dependencies automatically. For manual installation, install the dependencies before Traders Extended.
 
@@ -367,7 +368,7 @@ The left side is the trader prefab/name and the right side is an item prefab use
 
 A personal trader settings file can set `Trader currency / Override` to one currency prefab for that trader. Any buy- or sell-list entry can then override the trader currency again with its own `currency` field.
 
-The YAML parser is included in the mod; a separate YamlDotNet installation is not required. Conditional Config Sync remains a separate required dependency.
+YamlDotNet is a separate required dependency. The Thunderstore package `ValheimModding-YamlDotNet-16.3.1` contains YamlDotNet 16.3.0. For manual installations, install the YAML dependency separately. Conditional Config Sync also remains a separate required dependency.
 
 The amount dialog, affordability checks, list icons, sale payouts, buyback, and actual transaction all use the selected entry's currency. An invalid currency prefab is logged and falls back to the trader's normal currency.
 
@@ -464,16 +465,3 @@ The built-in editor handles Traders Extended item files and personal trader sett
 - [Buy Me a Coffee](https://buymeacoffee.com/shudnal)
 - [Discord server](https://discord.gg/e3UtQB8GFK)
 - [Nexus Mods](https://www.nexusmods.com/valheim/mods/2509)
-
-
-## Development checks
-
-Run `dotnet run --project tests/Regression/Regression.csproj --configuration Release -- .` with .NET 8, then
-`python tests/check_repository.py`. The regression runner compiles the tested production helpers against deterministic
-Unity/Valheim boundary doubles and parses all C# sources with Roslyn. It does not replace a game-linked Release build
-or an in-game integration test. The review and manual smoke-test checklist are in
-`docs/reviews/2026-09-07-repository-review.md`.
-
-Both distribution archives must be rebuilt before using a manual publish script. The build records their hashes and
-the current source/metadata fingerprint; publishing refuses stale or modified artifacts. CCS is always referenced as
-an external library, never merged into the mod. Nexus and Thunderstore use separate repack output directories.
