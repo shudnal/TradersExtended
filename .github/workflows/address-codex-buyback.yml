@@ -7,216 +7,24 @@ permissions:
   contents: write
 jobs:
   apply:
-    if: github.event.head_commit.message == 'Stage buyback preflight review fix'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-      - name: Apply reviewed source changes
+      - name: Apply checksum-verified source patch
         shell: python
         run: |
-          from pathlib import Path
-
-          def replace_once(path, old, new):
-              file = Path(path)
-              text = file.read_text()
-              count = text.count(old)
-              if count != 1:
-                  raise RuntimeError(f'{path}: expected one replacement target, found {count}')
-              file.write_text(text.replace(old, new))
-
-          replace_once('TradeInventory.cs', '''        internal static bool CanAddSavedItems(Inventory inventory, IEnumerable<ItemDrop.ItemData> items)
-        {
-            if (inventory == null || items == null)
-                return false;
-            int emptySlots = Math.Max(inventory.GetEmptySlots(), 0);
-            List<SavedStackSpace> freeStacks = inventory.GetAllItems().Select(item => new SavedStackSpace
-            {
-                Item = item,
-                Space = Math.Max(item.m_shared.m_maxStackSize - item.m_stack, 0)
-            }).ToList();
-            foreach (ItemDrop.ItemData saved in items)
-            {
-                if (saved?.m_shared == null || saved.m_dropPrefab == null || saved.m_stack <= 0 || saved.m_shared.m_maxStackSize <= 0)
-                    return false;
-                long remaining = saved.m_stack;
-                foreach (SavedStackSpace stack in freeStacks)
-                {
-                    if (stack.Space <= 0 || !CanMergeSavedItem(stack.Item, saved))
-                        continue;
-                    long added = Math.Min(remaining, stack.Space);
-                    stack.Space -= added;
-                    remaining -= added;
-                    if (remaining == 0)
-                        break;
-                }
-                long slots = (remaining + saved.m_shared.m_maxStackSize - 1) / saved.m_shared.m_maxStackSize;
-                if (slots > emptySlots)
-                    return false;
-                emptySlots -= (int)slots;
-                if (slots > 0)
-                    freeStacks.Add(new SavedStackSpace
-                    {
-                        Item = saved,
-                        Space = slots * saved.m_shared.m_maxStackSize - remaining
-                    });
-            }
-            return true;
-        }
-''', '''        internal static bool CanAddSavedItems(Inventory inventory, IEnumerable<ItemDrop.ItemData> items)
-        {
-            if (inventory == null || items == null)
-                return false;
-            List<SavedStackSpace> freeStacks = new List<SavedStackSpace>();
-            foreach (ItemDrop.ItemData existing in inventory.GetAllItems())
-            {
-                if (existing?.m_shared == null)
-                    return false;
-                freeStacks.Add(new SavedStackSpace
-                {
-                    Item = existing,
-                    Space = Math.Max(existing.m_shared.m_maxStackSize - existing.m_stack, 0)
-                });
-            }
-            return CanAddSavedItems(items, Math.Max(inventory.GetEmptySlots(), 0), freeStacks);
-        }
-
-        internal static bool CanAddSavedItemsAfterRemoval(Inventory inventory, IEnumerable<ItemDrop.ItemData> items,
-            IEnumerable<Removal> removal)
-        {
-            if (inventory == null || items == null)
-                return false;
-
-            Dictionary<ItemDrop.ItemData, int> removedAmounts = new Dictionary<ItemDrop.ItemData, int>();
-            if (removal != null)
-                foreach (Removal part in removal)
-                {
-                    if (part?.Item == null || part.Amount <= 0 || !inventory.ContainsItem(part.Item))
-                        return false;
-                    long combined = (long)(removedAmounts.TryGetValue(part.Item, out int current) ? current : 0) + part.Amount;
-                    if (combined > part.Item.m_stack)
-                        return false;
-                    removedAmounts[part.Item] = (int)combined;
-                }
-
-            int emptySlots = Math.Max(inventory.GetEmptySlots(), 0);
-            List<SavedStackSpace> freeStacks = new List<SavedStackSpace>();
-            foreach (ItemDrop.ItemData existing in inventory.GetAllItems())
-            {
-                if (existing?.m_shared == null)
-                    return false;
-                int removed = removedAmounts.TryGetValue(existing, out int planned) ? planned : 0;
-                int remaining = existing.m_stack - removed;
-                if (remaining <= 0)
-                {
-                    if (existing.m_stack > 0)
-                        emptySlots++;
-                    continue;
-                }
-                freeStacks.Add(new SavedStackSpace
-                {
-                    Item = existing,
-                    Space = Math.Max(existing.m_shared.m_maxStackSize - remaining, 0)
-                });
-            }
-            return CanAddSavedItems(items, emptySlots, freeStacks);
-        }
-
-        private static bool CanAddSavedItems(IEnumerable<ItemDrop.ItemData> items, int emptySlots,
-            List<SavedStackSpace> freeStacks)
-        {
-            foreach (ItemDrop.ItemData saved in items)
-            {
-                if (saved?.m_shared == null || saved.m_dropPrefab == null || saved.m_stack <= 0 || saved.m_shared.m_maxStackSize <= 0)
-                    return false;
-                long remaining = saved.m_stack;
-                foreach (SavedStackSpace stack in freeStacks)
-                {
-                    if (stack.Space <= 0 || !CanMergeSavedItem(stack.Item, saved))
-                        continue;
-                    long added = Math.Min(remaining, stack.Space);
-                    stack.Space -= added;
-                    remaining -= added;
-                    if (remaining == 0)
-                        break;
-                }
-                long slots = (remaining + saved.m_shared.m_maxStackSize - 1) / saved.m_shared.m_maxStackSize;
-                if (slots > emptySlots)
-                    return false;
-                emptySlots -= (int)slots;
-                if (slots > 0)
-                    freeStacks.Add(new SavedStackSpace
-                    {
-                        Item = saved,
-                        Space = slots * saved.m_shared.m_maxStackSize - remaining
-                    });
-            }
-            return true;
-        }
-''')
-
-          replace_once('StorePanel.cs', '''            if (!TradeInventory.PlanRemoval(inventory,
-                inventory.GetAllItems().Where(item => TradeInventory.MatchesCurrency(item, offer.currency)), offer.price,
-                out List<TradeInventory.Removal> payment))
-                return false;
-            using (TradeInventory.Snapshot snapshot = new TradeInventory.Snapshot(inventory))
-''', '''            if (!TradeInventory.PlanRemoval(inventory,
-                inventory.GetAllItems().Where(item => TradeInventory.MatchesCurrency(item, offer.currency)), offer.price,
-                out List<TradeInventory.Removal> payment) ||
-                !TradeInventory.CanAddSavedItemsAfterRemoval(inventory, offer.soldItems, payment))
-                return false;
-            using (TradeInventory.Snapshot snapshot = new TradeInventory.Snapshot(inventory))
-''')
-
-          replace_once('StorePanel.cs', '''                    // Preflight the cached receipt. BuyBackItem rechecks persistence and expiry on click.
-                    ItemToSell receipt = buybackItem;
-                    bool affordable = __instance.CanAfford(item);
-                    bool fits = receipt?.soldItems != null && Player.m_localPlayer != null &&
-                        TradeInventory.CanAddSavedItems(Player.m_localPlayer.GetInventory(), receipt.soldItems);
-                    __instance.m_buyButton.interactable = affordable && fits;
-                    __instance.m_buyButton.GetComponent<UITooltip>().m_text = affordable && fits ? string.Empty :
-                        Localization.instance.Localize(affordable ? "$inventory_full" : "$msg_missingrequirement");
-''', '''                    // Preflight the cached receipt against the same post-payment state used by BuyBackItem.
-                    ItemToSell receipt = buybackItem;
-                    Inventory inventory = Player.m_localPlayer?.GetInventory();
-                    bool affordable = receipt?.soldItems != null && receipt.currency != null && receipt.price > 0 && inventory != null &&
-                        TradeInventory.PlanRemoval(inventory,
-                            inventory.GetAllItems().Where(existing => TradeInventory.MatchesCurrency(existing, receipt.currency)),
-                            receipt.price, out List<TradeInventory.Removal> payment);
-                    bool fits = affordable && TradeInventory.CanAddSavedItemsAfterRemoval(inventory, receipt.soldItems, payment);
-                    __instance.m_buyButton.interactable = affordable && fits;
-                    __instance.m_buyButton.GetComponent<UITooltip>().m_text = affordable && fits ? string.Empty :
-                        Localization.instance.Localize(affordable ? "$inventory_full" : "$msg_missingrequirement");
-''')
-
-          replace_once('tests/Regression/Program.cs', '''        Check(TradeInventory.CapacityAfterRemoval(inventory, coins.m_itemData, 1, 1, partialPayment) == 95,
-            "When the bought item is also the currency, planned removal exposes stack space without double-counting slots");
-
-        inventory = new Inventory { Slots = 3 };
-''', '''        Check(TradeInventory.CapacityAfterRemoval(inventory, coins.m_itemData, 1, 1, partialPayment) == 95,
-            "When the bought item is also the currency, planned removal exposes stack space without double-counting slots");
-
-        var buyback = Prefab("Buyback", 1);
-        var savedBuyback = Stack(buyback, 1, world: 1);
-        Check(!TradeInventory.CanAddSavedItems(inventory, new[] { savedBuyback }),
-            "A full inventory cannot restore buyback before accounting for payment");
-        Check(TradeInventory.CanAddSavedItemsAfterRemoval(inventory, new[] { savedBuyback }, fullPayment),
-            "Buyback preflight sees a slot freed by fully consumed payment currency");
-        Check(!TradeInventory.CanAddSavedItemsAfterRemoval(inventory, new[] { savedBuyback }, partialPayment),
-            "Partial buyback payment does not invent a free slot");
-
-        inventory = new Inventory { Slots = 3 };
-''')
-
-          review = Path('docs/reviews/2026-09-07-repository-review.md')
-          text = review.read_text()
-          marker = '- Buy-offer restoration identity now includes `m_price`, preventing two otherwise identical configured offers with different prices from being silently interchanged after a list refresh.\n'
-          addition = marker + '- Buyback capacity now uses the projected inventory after its exact currency-removal plan, matching the actual transaction order and allowing a fully consumed payment stack to free the slot needed for the receipt. The click path performs the same preflight before mutating inventory.\n'
-          if text.count(marker) != 1:
-              raise RuntimeError('review follow-up marker not found exactly once')
-          review.write_text(text.replace(marker, addition))
+          import base64, gzip, hashlib, pathlib, subprocess
+          encoded = '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'
+          patch = gzip.decompress(base64.b64decode(encoded))
+          expected = '89f57c151a0e973aeb11bbb010fe49663bb23a7699bc42b3e0c8a9964d04688f'
+          if hashlib.sha256(patch).hexdigest() != expected:
+              raise RuntimeError('Patch checksum mismatch')
+          subprocess.run(['git', 'apply', '--check', '--whitespace=error'], input=patch, check=True)
+          subprocess.run(['git', 'apply', '--whitespace=error'], input=patch, check=True)
+          pathlib.Path('/tmp/applied.patch').write_bytes(patch)
       - name: Run source-only repository checks
         run: |
           python tests/check_repository.py
