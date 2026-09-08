@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal EnableDelayedExpansion
 
 pushd "%~dp0"
 
@@ -10,8 +10,9 @@ set THUNDERSTORE_EXIT=%ERRORLEVEL%
 if not "%THUNDERSTORE_EXIT%"=="0" (
     echo.
     echo Thunderstore publish failed. Exit code: %THUNDERSTORE_EXIT%
+    set "CONTINUE_NEXUS="
     set /p CONTINUE_NEXUS=Continue to Nexus anyway [Y,N]?
-    if /I not "%CONTINUE_NEXUS%"=="Y" (
+    if /I not "!CONTINUE_NEXUS!"=="Y" (
         echo.
         echo Publish stopped.
         pause

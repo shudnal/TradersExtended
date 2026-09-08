@@ -1,3 +1,9 @@
+# Unreleased
+* fixed the sell list losing selection after a sale
+* added whole-stack and multi-stack purchases and sales through the amount dialog
+* improved transaction safety, saved buyback items and configuration reload reliability
+* improved dedicated-server configuration editor access and large-file transfers
+
 # 2.0.0
 * added an in-game editor for trader settings and item lists, including dedicated-server administration, scalable windows and configurable gameplay input blocking
 * added YAML, YML and CSV support for trader item configurations

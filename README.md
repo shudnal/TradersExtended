@@ -1,4 +1,4 @@
-﻿# Traders Extended
+# Traders Extended
 
 ![logo](https://staticdelivery.nexusmods.com/mods/3667/images/headers/2509_1710675587.jpg)
 
@@ -30,7 +30,6 @@ Traders Extended adds trader-specific and common buy/sell lists, a two-column st
 - BepInEx Pack for Valheim
 - Conditional Config Sync
 - Json.NET
-- YamlDotNet
 
 A Thunderstore-compatible mod manager installs these dependencies automatically. For manual installation, install the dependencies before Traders Extended.
 
@@ -340,9 +339,21 @@ The item picker hides AI equipment and non-user-facing or invalid entries by def
 
 Personal trader settings use typed controls. Enable `Override` only for values that should differ for that trader; disabled values continue to inherit the synchronized BepInEx configuration. Item-prefab fields provide a searchable picker, and Store GUI position is edited as separate `x` and `y` values.
 
-When connected to a dedicated server, the editor requests access from the server and the server checks the requesting peer directly against its current server administrator list (`adminlist.txt`). The client does not rely on `LocalPlayerIsAdminOrHost()` or a locally synchronized copy of the list. Every file operation is authorized again on the server before it is executed. Saving a file validates it, writes it to the selected local or server directory, and reloads the Traders Extended configuration.
+When connected to a dedicated server, the editor requests access from the server and the server checks the requesting peer directly against its current server administrator list (`adminlist.txt`). The client does not rely on `LocalPlayerIsAdminOrHost()` or a locally synchronized copy of the list. Every file operation is authorized again using the actual network connection before it is executed. The remote editor requires the updated build on both client and server. Access can be retried with Refresh after a timeout; old replies cannot grant access to a new session. Saving a file validates it, writes it to the selected local or server directory, and reloads the Traders Extended configuration.
 
 The editor uses Valheim Profiler-style window behavior: monitor-aware GUI scaling, Valheim accessibility scaling, dragging, resizing from the right or bottom edge and the lower-right handle, a draggable separator between the file list and editor, and square scrollbars. `Prevent input` can be changed directly in the editor header and is also available as a local BepInEx setting. `Configuration editor shortcut`, window position and size, `Scale`, `Use Valheim GUI scaling`, `Font size`, `File list width`, `Show all items`, and `Visible item columns` are stored together in the local `Configuration editor` section. `Visible item columns` is a comma-separated list using the tokens `Prefab`, `Name`, `Stack`, `Price`, `Quality`, `Currency`, `RequiredGlobalKey`, `BlockedGlobalKey`, `RequiredPlayerKey`, and `BlockedPlayerKey`.
+
+## Trading amounts
+
+Double-click a buy or sell row, or use the alternate gamepad action, to open the amount dialog. The slider counts
+whole trade lots: an offer with `stack: 20` and `price: 10` bought three times delivers 60 items for 30 currency.
+Configured multi-item sell lots work the same way; an incomplete remainder stays in the inventory. Ordinary combined
+sell rows count individual items. The preview shows the delivered item count and the total payment, and limits reflect
+available inventory space, payment currency and trader funds. Flexible sale prices are rounded once for the whole trade.
+Buyback remains one indivisible receipt rather than a splittable offer.
+
+After selling, the sell list remains selected, including when buyback adds a new entry to the buy list. When an offer
+is exhausted, the nearest remaining sell row is selected; an empty sell list does not force selection to the buy pane.
 
 ## Custom currencies
 
@@ -355,6 +366,8 @@ Haldor:Ruby, Hildir:Coins, BogWitch:CelestialFeather
 The left side is the trader prefab/name and the right side is an item prefab used as that trader's default currency. The default applies to purchases, sales, trader balance, and buyback. Repair payments use the separate `Trader repair / Repair currency` setting.
 
 A personal trader settings file can set `Trader currency / Override` to one currency prefab for that trader. Any buy- or sell-list entry can then override the trader currency again with its own `currency` field.
+
+The YAML parser is included in the mod; a separate YamlDotNet installation is not required. Conditional Config Sync remains a separate required dependency.
 
 The amount dialog, affordability checks, list icons, sale payouts, buyback, and actual transaction all use the selected entry's currency. An invalid currency prefab is logged and falls back to the trader's normal currency.
 
@@ -390,7 +403,7 @@ When the amount is omitted, that trader's configured replenishment minimum is us
 
 Buyback is stored separately for each trader. An item sold to one trader cannot be bought back from another trader.
 
-Buyback data is saved in the character's custom data and grouped by world identifier, so it survives logout and does not leak between worlds. `Buyback lifetime in world seconds` controls expiration. Set it to `0` to keep buyback entries until they are replaced or purchased.
+Buyback data is saved in the character's custom data and grouped by world identifier, so it survives logout and does not leak between worlds. Bulk sale receipts retain each sold stack rather than copying the metadata of one representative item. `Buyback lifetime in world seconds` controls expiration. Set it to `0` to keep buyback entries until they are replaced or purchased.
 
 ## Epic Loot compatibility
 
@@ -451,3 +464,16 @@ The built-in editor handles Traders Extended item files and personal trader sett
 - [Buy Me a Coffee](https://buymeacoffee.com/shudnal)
 - [Discord server](https://discord.gg/e3UtQB8GFK)
 - [Nexus Mods](https://www.nexusmods.com/valheim/mods/2509)
+
+
+## Development checks
+
+Run `dotnet run --project tests/Regression/Regression.csproj --configuration Release -- .` with .NET 8, then
+`python tests/check_repository.py`. The regression runner compiles the tested production helpers against deterministic
+Unity/Valheim boundary doubles and parses all C# sources with Roslyn. It does not replace a game-linked Release build
+or an in-game integration test. The review and manual smoke-test checklist are in
+`docs/reviews/2026-09-07-repository-review.md`.
+
+Both distribution archives must be rebuilt before using a manual publish script. The build records their hashes and
+the current source/metadata fingerprint; publishing refuses stale or modified artifacts. CCS is always referenced as
+an external library, never merged into the mod. Nexus and Thunderstore use separate repack output directories.

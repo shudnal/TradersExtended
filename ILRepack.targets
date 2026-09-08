@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
 	<PropertyGroup>
@@ -17,6 +17,9 @@
 
 			<ThunderstorePackageDir>$(ProjectDir)package\thunderstore\$(EffectiveModName)\</ThunderstorePackageDir>
 			<ThunderstoreZipPath>$(ProjectDir)package\thunderstore\$(EffectiveModName).zip</ThunderstoreZipPath>
+
+			<NexusRepackDir>$(TargetDir)nexus\</NexusRepackDir>
+			<NexusRepackDllPath>$(NexusRepackDir)$(TargetFileName)</NexusRepackDllPath>
 
 			<NexusPackageDir>$(ProjectDir)package\nexus\</NexusPackageDir>
 			<NexusPackageContentDir>$(ProjectDir)package\nexus\$(EffectiveModName)\</NexusPackageContentDir>
@@ -54,6 +57,7 @@
 			<ThunderstoreInputAssemblies Include="$(TargetPath)" />
 			<ThunderstoreInputAssemblies Include="$(OutputPath)AzuExtendedPlayerInventoryAPI.dll" />
 			<ThunderstoreInputAssemblies Include="$(OutputPath)ExtraSlotsAPI.dll" />
+			<ThunderstoreInputAssemblies Include="$(OutputPath)YamlDotNet.dll" />
 		</ItemGroup>
 
 		<ILRepack
@@ -84,6 +88,7 @@
 	</Target>
 
 	<Target Name="ZipThunderstore" AfterTargets="UpdateThunderstoreManifest">
+		<Copy SourceFiles="$(ProjectDir)README.md" DestinationFolder="$(ThunderstorePackageDir)" />
 		<ZipDirectory
 			SourceDirectory="$(ThunderstorePackageDir)"
 			DestinationFile="$(ThunderstoreZipPath)"
@@ -91,6 +96,7 @@
 	</Target>
 
 	<Target Name="RepackNexus" AfterTargets="ZipThunderstore">
+		<MakeDir Directories="$(NexusRepackDir)" />
 		<ItemGroup>
 			<NexusInputAssemblies Include="$(TargetPath)" />
 			<NexusInputAssemblies Include="$(OutputPath)AzuExtendedPlayerInventoryAPI.dll" />
@@ -104,7 +110,7 @@
 			DebugInfo="true"
 			Internalize="true"
 			InputAssemblies="@(NexusInputAssemblies)"
-			OutputFile="$(TargetPath)"
+			OutputFile="$(NexusRepackDllPath)"
 			TargetKind="SameAsPrimaryAssembly"
 			LibraryPath="$(OutputPath)" />
 	</Target>
@@ -113,7 +119,7 @@
 		<MakeDir Directories="$(NexusPackageContentDir)" />
 
 		<Copy
-			SourceFiles="$(TargetPath)"
+			SourceFiles="$(NexusRepackDllPath)"
 			DestinationFolder="$(NexusPackageContentDir)" />
 
 		<Message Text="Copied to nexus package folder: $(NexusPackageContentDir)" Importance="High" />
@@ -141,4 +147,10 @@
 		<Message Text="Copied to r2 folder." Importance="High" />
 	</Target>
 
+    <Target Name="InvalidatePackageReceipt" BeforeTargets="Build">
+        <Delete Files="$(ProjectDir)package\release-receipt.json" />
+    </Target>
+    <Target Name="RecordPackageReceipt" AfterTargets="ZipNexus">
+        <Exec Command="powershell -ExecutionPolicy Bypass -NoProfile -File &quot;$(ProjectDir)Test-PackageFreshness.ps1&quot; -WriteReceipt" />
+    </Target>
 </Project>

@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>11</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="../../TradeAmounts.cs" Link="Production/TradeAmounts.cs" />
+    <Compile Include="../../TradeSelection.cs" Link="Production/TradeSelection.cs" />
+    <Compile Include="../../TradeInventory.cs" Link="Production/TradeInventory.cs" />
+    <Compile Include="../../CsvRecords.cs" Link="Production/CsvRecords.cs" />
+    <Compile Include="../../ConfigPersistence.cs" Link="Production/ConfigPersistence.cs" />
+    <Compile Include="../../EditorTransferBuffer.cs" Link="Production/EditorTransferBuffer.cs" />
+    <Compile Include="../../ConfigEditorTransport.cs" Link="Production/ConfigEditorTransport.cs" />
+  </ItemGroup>
+</Project>
