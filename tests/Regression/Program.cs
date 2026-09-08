@@ -110,6 +110,15 @@ internal static class Program
         Check(TradeInventory.CapacityAfterRemoval(inventory, coins.m_itemData, 1, 1, partialPayment) == 95,
             "When the bought item is also the currency, planned removal exposes stack space without double-counting slots");
 
+        var buyback = Prefab("Buyback", 1);
+        var savedBuyback = Stack(buyback, 1, world: 1);
+        Check(!TradeInventory.CanAddSavedItems(inventory, new[] { savedBuyback }),
+            "A full inventory cannot restore buyback before accounting for payment");
+        Check(TradeInventory.CanAddSavedItemsAfterRemoval(inventory, new[] { savedBuyback }, fullPayment),
+            "Buyback preflight sees a slot freed by fully consumed payment currency");
+        Check(!TradeInventory.CanAddSavedItemsAfterRemoval(inventory, new[] { savedBuyback }, partialPayment),
+            "Partial buyback payment does not invent a free slot");
+
         inventory = new Inventory { Slots = 3 };
         old = Stack(coins, 70, world: 0);
         payable = Stack(coins, 8, world: 1);

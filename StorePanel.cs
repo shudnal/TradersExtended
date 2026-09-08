@@ -690,7 +690,8 @@ namespace TradersExtended
             Inventory inventory = Player.m_localPlayer.GetInventory();
             if (!TradeInventory.PlanRemoval(inventory,
                 inventory.GetAllItems().Where(item => TradeInventory.MatchesCurrency(item, offer.currency)), offer.price,
-                out List<TradeInventory.Removal> payment))
+                out List<TradeInventory.Removal> payment) ||
+                !TradeInventory.CanAddSavedItemsAfterRemoval(inventory, offer.soldItems, payment))
                 return false;
             using (TradeInventory.Snapshot snapshot = new TradeInventory.Snapshot(inventory))
             {
@@ -1517,11 +1518,14 @@ namespace TradersExtended
                     return;
                 if (ItemToSell.IsBuyBackItem(item))
                 {
-                    // Preflight the cached receipt. BuyBackItem rechecks persistence and expiry on click.
+                    // Preflight the cached receipt against the same post-payment state used by BuyBackItem.
                     ItemToSell receipt = buybackItem;
-                    bool affordable = __instance.CanAfford(item);
-                    bool fits = receipt?.soldItems != null && Player.m_localPlayer != null &&
-                        TradeInventory.CanAddSavedItems(Player.m_localPlayer.GetInventory(), receipt.soldItems);
+                    Inventory inventory = Player.m_localPlayer?.GetInventory();
+                    bool affordable = receipt?.soldItems != null && receipt.currency != null && receipt.price > 0 && inventory != null &&
+                        TradeInventory.PlanRemoval(inventory,
+                            inventory.GetAllItems().Where(existing => TradeInventory.MatchesCurrency(existing, receipt.currency)),
+                            receipt.price, out List<TradeInventory.Removal> payment);
+                    bool fits = affordable && TradeInventory.CanAddSavedItemsAfterRemoval(inventory, receipt.soldItems, payment);
                     __instance.m_buyButton.interactable = affordable && fits;
                     __instance.m_buyButton.GetComponent<UITooltip>().m_text = affordable && fits ? string.Empty :
                         Localization.instance.Localize(affordable ? "$inventory_full" : "$msg_missingrequirement");

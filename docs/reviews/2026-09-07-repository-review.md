@@ -71,6 +71,7 @@ The temporary import files and recovery workflow are removed from the final bran
 
 - Purchase capacity is evaluated against the projected inventory after its own currency-removal plan. A full inventory therefore no longer rejects a valid purchase when payment consumes a currency stack and frees the required slot. Partial payments do not create phantom slots, and same-item currency removal contributes only the resulting stack space.
 - Buy-offer restoration identity now includes `m_price`, preventing two otherwise identical configured offers with different prices from being silently interchanged after a list refresh.
+- Buyback capacity now uses the projected inventory after its exact currency-removal plan, matching the actual transaction order and allowing a fully consumed payment stack to free the slot needed for the receipt. The click path performs the same preflight before mutating inventory.
 
 ## Validation
 

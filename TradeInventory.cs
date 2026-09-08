@@ -203,12 +203,64 @@ namespace TradersExtended
         {
             if (inventory == null || items == null)
                 return false;
-            int emptySlots = Math.Max(inventory.GetEmptySlots(), 0);
-            List<SavedStackSpace> freeStacks = inventory.GetAllItems().Select(item => new SavedStackSpace
+            List<SavedStackSpace> freeStacks = new List<SavedStackSpace>();
+            foreach (ItemDrop.ItemData existing in inventory.GetAllItems())
             {
-                Item = item,
-                Space = Math.Max(item.m_shared.m_maxStackSize - item.m_stack, 0)
-            }).ToList();
+                if (existing?.m_shared == null)
+                    return false;
+                freeStacks.Add(new SavedStackSpace
+                {
+                    Item = existing,
+                    Space = Math.Max(existing.m_shared.m_maxStackSize - existing.m_stack, 0)
+                });
+            }
+            return CanAddSavedItems(items, Math.Max(inventory.GetEmptySlots(), 0), freeStacks);
+        }
+
+        internal static bool CanAddSavedItemsAfterRemoval(Inventory inventory, IEnumerable<ItemDrop.ItemData> items,
+            IEnumerable<Removal> removal)
+        {
+            if (inventory == null || items == null)
+                return false;
+
+            Dictionary<ItemDrop.ItemData, int> removedAmounts = new Dictionary<ItemDrop.ItemData, int>();
+            if (removal != null)
+                foreach (Removal part in removal)
+                {
+                    if (part?.Item == null || part.Amount <= 0 || !inventory.ContainsItem(part.Item))
+                        return false;
+                    long combined = (long)(removedAmounts.TryGetValue(part.Item, out int current) ? current : 0) + part.Amount;
+                    if (combined > part.Item.m_stack)
+                        return false;
+                    removedAmounts[part.Item] = (int)combined;
+                }
+
+            int emptySlots = Math.Max(inventory.GetEmptySlots(), 0);
+            List<SavedStackSpace> freeStacks = new List<SavedStackSpace>();
+            foreach (ItemDrop.ItemData existing in inventory.GetAllItems())
+            {
+                if (existing?.m_shared == null)
+                    return false;
+                int removed = removedAmounts.TryGetValue(existing, out int planned) ? planned : 0;
+                int remaining = existing.m_stack - removed;
+                if (remaining <= 0)
+                {
+                    if (existing.m_stack > 0)
+                        emptySlots++;
+                    continue;
+                }
+                freeStacks.Add(new SavedStackSpace
+                {
+                    Item = existing,
+                    Space = Math.Max(existing.m_shared.m_maxStackSize - remaining, 0)
+                });
+            }
+            return CanAddSavedItems(items, emptySlots, freeStacks);
+        }
+
+        private static bool CanAddSavedItems(IEnumerable<ItemDrop.ItemData> items, int emptySlots,
+            List<SavedStackSpace> freeStacks)
+        {
             foreach (ItemDrop.ItemData saved in items)
             {
                 if (saved?.m_shared == null || saved.m_dropPrefab == null || saved.m_stack <= 0 || saved.m_shared.m_maxStackSize <= 0)
