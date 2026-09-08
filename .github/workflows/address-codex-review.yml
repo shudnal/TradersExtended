@@ -1,19 +1,25 @@
 name: Apply Codex review fixes
 on:
   push:
-    branches: [fix/trade-focus-stack-dialog-review]
-    paths: ['.github/workflows/address-codex-review.yml']
+    branches:
+      - fix/trade-focus-stack-dialog-review
+    paths:
+      - .github/workflows/address-codex-review.yml
 permissions:
   contents: write
 jobs:
   apply:
-    if: github.event.head_commit.message == 'Stage Codex review fixes'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
+      - name: Guard materialization commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git log -1 --pretty=%s)" = "Retry Codex review fix materialization"
       - name: Apply reviewed source changes
         shell: python
         run: |
@@ -22,8 +28,9 @@ jobs:
           def replace_once(path, old, new):
               file = Path(path)
               text = file.read_text()
-              if text.count(old) != 1:
-                  raise RuntimeError(f'{path}: expected one replacement target, found {text.count(old)}')
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{path}: expected one replacement target, found {count}')
               file.write_text(text.replace(old, new))
 
           replace_once('TradeInventory.cs', '''        internal static bool PlanRemoval(Inventory inventory, IEnumerable<ItemDrop.ItemData> candidates, int amount, out List<Removal> plan)
@@ -163,7 +170,9 @@ jobs:
               raise RuntimeError('review document validation marker not found exactly once')
           review.write_text(text.replace(marker, addition + marker))
       - name: Run source-only repository checks
+        shell: bash
         run: |
+          set -euo pipefail
           python tests/check_repository.py
           git diff --check
           python -m pip install --quiet --only-binary=:all: tree-sitter==0.25.2 tree-sitter-c-sharp==0.23.1
