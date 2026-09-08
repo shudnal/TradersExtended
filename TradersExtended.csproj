@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -113,6 +113,12 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="TradeAmounts.cs" />
+    <Compile Include="TradeInventory.cs" />
+    <Compile Include="TradeSelection.cs" />
+    <Compile Include="ConfigPersistence.cs" />
+    <Compile Include="CsvRecords.cs" />
+    <Compile Include="EditorTransferBuffer.cs" />
     <Compile Include="AmountDialog.cs" />
     <Compile Include="BuybackManager.cs" />
     <Compile Include="CoinsPatches.cs" />

@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using UnityEngine;
 using static TradersExtended.TradersExtended;
 
@@ -12,7 +12,8 @@ namespace TradersExtended
         {
             get
             {
-                float scale = Mathf.Clamp(configEditorUiScale?.Value ?? 1f, 0.25f, 4f);
+                float configuredScale = configEditorUiScale?.Value ?? 1f;
+                float scale = float.IsNaN(configuredScale) || float.IsInfinity(configuredScale) ? 1f : Mathf.Clamp(configuredScale, 0.25f, 4f);
                 if (configEditorUseValheimGuiScale?.Value != false)
                     scale *= GetValheimGuiScale();
                 return Mathf.Max(0.01f, scale);
@@ -39,7 +40,8 @@ namespace TradersExtended
             {
                 float widthFactor = (float)PhysicalWidth / GuiScaler.m_minWidth;
                 float heightFactor = (float)PhysicalHeight / GuiScaler.m_minHeight;
-                return Mathf.Max(0.01f, Mathf.Min(widthFactor, heightFactor) * GuiScaler.m_largeGuiScale);
+                float factor = Mathf.Min(widthFactor, heightFactor) * GuiScaler.m_largeGuiScale;
+                return float.IsNaN(factor) || float.IsInfinity(factor) ? 1f : Mathf.Max(0.01f, factor);
             }
             catch
             {

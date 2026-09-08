@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using HarmonyLib;
 using Newtonsoft.Json;
 using System;
@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using UnityEngine;
 
 namespace TradersExtended
 {
@@ -23,6 +24,15 @@ namespace TradersExtended
     {
         private const string RequestRpc = TradersExtended.pluginID + ".ConfigEditorRequest";
         private const string ResponseRpc = TradersExtended.pluginID + ".ConfigEditorResponse";
+        private const string ProgressRpc = RequestRpc + ".Progress";
+        private const string RequestChunkRpc = RequestRpc + ".Chunk";
+        private const string ResponseChunkRpc = ResponseRpc + ".Chunk";
+        private static readonly Dictionary<ZRpc, EditorTransferBuffer> incomingRequests = new Dictionary<ZRpc, EditorTransferBuffer>();
+        private static EditorTransferBuffer incomingResponse;
+        internal static event Action TransferProgress;
+        private const int CorrelationMarker = 0x54454332;
+        private const int MaximumPackageBytes = ConfigPersistence.MaximumFileBytes + 8192;
+        private const float RequestTimeoutSeconds = 15f;
 
         private enum RemoteAdminAccessState
         {
@@ -37,11 +47,40 @@ namespace TradersExtended
             internal ConfigEditorOperation Operation;
             internal string FileName;
             internal string Content;
+            internal long Id;
+            internal float StartedAt;
         }
 
         private static RemoteAdminAccessState remoteAdminAccess;
         private static long remoteAdminServerPeerId;
         private static PendingRequest pendingRequest;
+        private static PendingRequest activeRequest;
+        private static long nextRequestId;
+        private static ZNet remoteSession;
+        private static ZRpc remoteServerRpc;
+        private static long targetRevision;
+        private static float nextTransferCleanup;
+
+        internal static long TargetRevision
+        {
+            get
+            {
+                RefreshRemoteAdminState();
+                return targetRevision;
+            }
+        }
+
+        internal static void Update()
+        {
+            RefreshRemoteAdminState();
+            float now = Time.realtimeSinceStartup;
+            if (now < nextTransferCleanup)
+                return;
+            nextTransferCleanup = now + 1f;
+            foreach (ZRpc rpc in incomingRequests.Where(entry => now - entry.Value.LastActivity > RequestTimeoutSeconds)
+                .Select(entry => entry.Key).ToArray())
+                incomingRequests.Remove(rpc);
+        }
 
         internal static event Action<ConfigEditorOperation, bool, string, string, string> ResponseReceived;
 
@@ -49,8 +88,7 @@ namespace TradersExtended
         {
             get
             {
-                return ZNet.instance != null && !ZNet.instance.IsServer() && ZRoutedRpc.instance != null &&
-                       ZRoutedRpc.instance.GetServerPeerID() != 0L;
+                return ZNet.instance != null && !ZNet.instance.IsServer();
             }
         }
 
@@ -58,10 +96,11 @@ namespace TradersExtended
         {
             get
             {
+                RefreshRemoteAdminState();
                 if (!UsesRemoteServer)
                     return true;
-
-                RefreshRemoteAdminState();
+                if (remoteAdminServerPeerId == 0L)
+                    return false;
                 return remoteAdminAccess == RemoteAdminAccessState.Allowed;
             }
         }
@@ -72,17 +111,22 @@ namespace TradersExtended
 
         internal static void RegisterRpc()
         {
-            ZRoutedRpc routed = ZRoutedRpc.instance;
-            if (routed == null)
+            if (ZNet.instance == null)
                 return;
+            foreach (ZNetPeer peer in ZNet.instance.GetPeers())
+                RegisterRpc(peer);
+        }
 
-            int requestHash = RequestRpc.GetStableHashCode();
-            if (!routed.m_functions.ContainsKey(requestHash))
-                routed.Register<ZPackage>(RequestRpc, RPC_Request);
-
-            int responseHash = ResponseRpc.GetStableHashCode();
-            if (!routed.m_functions.ContainsKey(responseHash))
-                routed.Register<ZPackage>(ResponseRpc, RPC_Response);
+        internal static void RegisterRpc(ZNetPeer peer)
+        {
+            if (peer?.m_rpc == null)
+                return;
+            // Direct RPCs retain the authenticated connection. Routed sender IDs are payload data.
+            peer.m_rpc.Register<ZPackage>(RequestRpc, RPC_Request);
+            peer.m_rpc.Register<ZPackage>(ResponseRpc, RPC_Response);
+            peer.m_rpc.Register<ZPackage>(RequestChunkRpc, RPC_RequestChunk);
+            peer.m_rpc.Register<ZPackage>(ResponseChunkRpc, RPC_ResponseChunk);
+            peer.m_rpc.Register<ZPackage>(ProgressRpc, RPC_TransferProgress);
         }
 
         internal static void RequestList()
@@ -113,6 +157,8 @@ namespace TradersExtended
         private static void SendRequest(ConfigEditorOperation operation, string fileName, string content, bool forceAdminRefresh = false)
         {
             RegisterRpc();
+            RefreshRemoteAdminState();
+            CancelPendingRequest();
 
             if (!UsesRemoteServer)
             {
@@ -120,7 +166,11 @@ namespace TradersExtended
                 return;
             }
 
-            RefreshRemoteAdminState();
+            if (remoteAdminServerPeerId == 0L)
+            {
+                Emit(operation, false, fileName, "The server connection is not ready. No local files were changed.", string.Empty);
+                return;
+            }
             PendingRequest request = new PendingRequest
             {
                 Operation = operation,
@@ -161,97 +211,183 @@ namespace TradersExtended
             });
         }
 
+        internal static void CancelPendingRequest()
+        {
+            activeRequest = null;
+            pendingRequest = null;
+            incomingResponse = null;
+            if (remoteAdminAccess == RemoteAdminAccessState.Checking)
+                remoteAdminAccess = RemoteAdminAccessState.Unknown;
+        }
+
         private static void SendRemoteRequest(PendingRequest request)
         {
-            if (request == null || ZRoutedRpc.instance == null)
+            if (request == null || remoteServerRpc == null || remoteAdminServerPeerId == 0L)
                 return;
 
+            request.Id = ++nextRequestId;
+            request.StartedAt = Time.realtimeSinceStartup;
+            activeRequest = request;
             ZPackage package = new ZPackage();
             package.Write((int)request.Operation);
             package.Write(request.FileName ?? string.Empty);
             package.Write(request.Content ?? string.Empty);
-            ZRoutedRpc.instance.InvokeRoutedRPC(ZRoutedRpc.instance.GetServerPeerID(), RequestRpc, package);
+            WriteCorrelation(package, request.Id);
+            if (package.Size() > MaximumPackageBytes)
+            {
+                CancelPendingRequest();
+                Emit(request.Operation, false, request.FileName, "The configuration exceeds the 8 MiB editor file limit.", string.Empty);
+                return;
+            }
+            SendPackage(remoteServerRpc, RequestRpc, RequestChunkRpc, package, request.Operation, request.Id);
         }
 
         private static void RefreshRemoteAdminState()
         {
-            long serverPeerId = UsesRemoteServer && ZRoutedRpc.instance != null
-                ? ZRoutedRpc.instance.GetServerPeerID()
-                : 0L;
-            if (serverPeerId == remoteAdminServerPeerId)
-                return;
-
-            remoteAdminServerPeerId = serverPeerId;
-            remoteAdminAccess = RemoteAdminAccessState.Unknown;
-            pendingRequest = null;
+            ZNetPeer server = UsesRemoteServer ? ZNet.instance.GetServerPeer() : null;
+            long serverPeerId = server?.m_uid ?? 0L;
+            if (!ReferenceEquals(remoteSession, ZNet.instance) || !ReferenceEquals(remoteServerRpc, server?.m_rpc) ||
+                serverPeerId != remoteAdminServerPeerId)
+            {
+                if (!ReferenceEquals(remoteSession, ZNet.instance))
+                    incomingRequests.Clear();
+                targetRevision++;
+                remoteSession = ZNet.instance;
+                remoteServerRpc = server?.m_rpc;
+                remoteAdminServerPeerId = serverPeerId;
+                remoteAdminAccess = RemoteAdminAccessState.Unknown;
+                CancelPendingRequest();
+            }
+            if (activeRequest != null && Time.realtimeSinceStartup - activeRequest.StartedAt > RequestTimeoutSeconds)
+                CancelPendingRequest();
         }
 
-        private static void RPC_Request(long sender, ZPackage package)
+        private static void WriteCorrelation(ZPackage package, long id)
         {
-            if (ZNet.instance == null || !ZNet.instance.IsServer())
-                return;
-
-            ConfigEditorOperation operation = (ConfigEditorOperation)package.ReadInt();
-            string fileName = package.ReadString();
-            string content = package.ReadString();
-            bool senderIsAdmin = IsSenderAdmin(sender);
-
-            if (operation == ConfigEditorOperation.Access)
-            {
-                SendResponse(sender, operation, true, string.Empty,
-                    senderIsAdmin ? "Administrator access granted." : "Administrator access denied.",
-                    senderIsAdmin ? "1" : "0");
-                return;
-            }
-
-            if (!senderIsAdmin)
-            {
-                SendResponse(sender, operation, false, fileName, "Administrator access is required to edit Traders Extended files.", string.Empty);
-                return;
-            }
-
-            ExecuteRequest(operation, fileName, content,
-                (responseOperation, success, responseFile, message, payload) =>
-                    SendResponse(sender, responseOperation, success, responseFile, message, payload));
+            package.Write(CorrelationMarker);
+            package.Write(id);
         }
 
-        private static void RPC_Response(long sender, ZPackage package)
+        private static long ReadCorrelation(ZPackage package)
         {
-            if (UsesRemoteServer && ZRoutedRpc.instance != null && sender != ZRoutedRpc.instance.GetServerPeerID())
-                return;
+            int remaining = package.Size() - package.GetPos();
+            if (remaining == 0)
+                return 0L; // A response without a correlation ID cannot be used safely.
+            if (remaining != 12 || package.ReadInt() != CorrelationMarker)
+                throw new InvalidDataException("Invalid editor request correlation data.");
+            return package.ReadLong();
+        }
 
-            ConfigEditorOperation operation = (ConfigEditorOperation)package.ReadInt();
-            bool success = package.ReadBool();
-            string fileName = package.ReadString();
-            string message = package.ReadString();
-            string payload = package.ReadString();
-
-            if (operation == ConfigEditorOperation.Access)
+        private static long PeekCorrelation(ZPackage package)
+        {
+            int position = package.GetPos();
+            try
             {
-                remoteAdminAccess = success && payload == "1"
-                    ? RemoteAdminAccessState.Allowed
-                    : RemoteAdminAccessState.Denied;
+                if (package.Size() < 16)
+                    return 0L;
+                package.SetPos(package.Size() - 12);
+                return package.ReadInt() == CorrelationMarker ? package.ReadLong() : 0L;
+            }
+            finally { package.SetPos(position); }
+        }
 
-                PendingRequest request = pendingRequest;
-                pendingRequest = null;
-                if (request == null)
+        private static void RPC_Request(ZRpc sender, ZPackage package)
+        {
+            if (ZNet.instance == null || !ZNet.instance.IsServer() || package == null || package.Size() > MaximumPackageBytes)
+                return;
+            try
+            {
+                ConfigEditorOperation operation = (ConfigEditorOperation)package.ReadInt();
+                if (!Enum.IsDefined(typeof(ConfigEditorOperation), operation))
+                    return;
+                bool senderIsAdmin = IsSenderAdmin(sender);
+                // Reject unauthorized file access before decoding strings or touching the filesystem.
+                if (!senderIsAdmin && operation != ConfigEditorOperation.Access)
+                {
+                    SendResponse(sender, operation, false, string.Empty,
+                        "Administrator access is required to edit Traders Extended files.", string.Empty, PeekCorrelation(package));
+                    return;
+                }
+                if (operation == ConfigEditorOperation.Access && package.Size() > 1024)
+                    return;
+                string fileName = package.ReadString();
+                string content = package.ReadString();
+                long requestId = ReadCorrelation(package);
+                if (operation == ConfigEditorOperation.Access)
+                {
+                    SendResponse(sender, operation, true, string.Empty,
+                        senderIsAdmin ? "Administrator access granted." : "Administrator access denied.",
+                        senderIsAdmin ? "1" : "0", requestId);
+                    return;
+                }
+                ExecuteRequest(operation, fileName, content,
+                    (responseOperation, success, responseFile, message, payload) =>
+                        SendResponse(sender, responseOperation, success, responseFile, message, payload, requestId));
+            }
+            catch (Exception exception)
+            {
+                TradersExtended.LogWarning($"Invalid configuration editor request from peer {sender}: {exception.Message}");
+            }
+        }
+
+        private static void RPC_Response(ZRpc sender, ZPackage package)
+        {
+            RefreshRemoteAdminState();
+            if (!UsesRemoteServer || remoteAdminServerPeerId == 0L || !ReferenceEquals(sender, remoteServerRpc) ||
+                activeRequest == null || package == null || package.Size() > MaximumPackageBytes)
+                return;
+            try
+            {
+                ConfigEditorOperation operation = (ConfigEditorOperation)package.ReadInt();
+                bool success = package.ReadBool();
+                string fileName = package.ReadString();
+                string message = package.ReadString();
+                string payload = package.ReadString();
+                long requestId = ReadCorrelation(package);
+                if (requestId == 0L)
+                {
+                    PendingRequest failed = pendingRequest ?? activeRequest;
+                    CancelPendingRequest();
+                    remoteAdminAccess = RemoteAdminAccessState.Unknown;
+                    Emit(failed.Operation, false, failed.FileName, "Update Traders Extended on the server to use this editor safely.", string.Empty);
+                    return;
+                }
+                if (requestId != activeRequest.Id || operation != activeRequest.Operation)
                     return;
 
-                if (remoteAdminAccess == RemoteAdminAccessState.Allowed)
-                    SendRemoteRequest(request);
-                else
-                    Emit(request.Operation, false, request.FileName,
-                        "Administrator access is required to edit Traders Extended files on this server.", string.Empty);
-                return;
+                PendingRequest completed = activeRequest;
+                if (success && operation != ConfigEditorOperation.Access && operation != ConfigEditorOperation.List && fileName != completed.FileName)
+                    throw new InvalidDataException("The server returned a different configuration file.");
+                activeRequest = null;
+                if (operation == ConfigEditorOperation.Access)
+                {
+                    remoteAdminAccess = success && payload == "1" ? RemoteAdminAccessState.Allowed : RemoteAdminAccessState.Denied;
+                    PendingRequest request = pendingRequest;
+                    pendingRequest = null;
+                    if (request == null)
+                        return;
+                    if (remoteAdminAccess == RemoteAdminAccessState.Allowed)
+                        SendRemoteRequest(request);
+                    else
+                        Emit(request.Operation, false, request.FileName,
+                            "Administrator access is required to edit Traders Extended files on this server.", string.Empty);
+                    return;
+                }
+                if (!success && message.IndexOf("Administrator access", StringComparison.OrdinalIgnoreCase) >= 0)
+                    remoteAdminAccess = RemoteAdminAccessState.Denied;
+                Emit(operation, success, completed.FileName, message, payload);
             }
-
-            if (!success && message.IndexOf("Administrator access", StringComparison.OrdinalIgnoreCase) >= 0)
-                remoteAdminAccess = RemoteAdminAccessState.Denied;
-
-            Emit(operation, success, fileName, message, payload);
+            catch (Exception exception)
+            {
+                PendingRequest failed = pendingRequest ?? activeRequest;
+                CancelPendingRequest();
+                if (failed != null)
+                    Emit(failed.Operation, false, failed.FileName, "Invalid configuration editor response: " + exception.Message, string.Empty);
+                TradersExtended.LogWarning($"Invalid configuration editor response: {exception.Message}");
+            }
         }
 
-        private static void SendResponse(long target, ConfigEditorOperation operation, bool success, string fileName, string message, string payload)
+        private static void SendResponse(ZRpc target, ConfigEditorOperation operation, bool success, string fileName, string message, string payload, long requestId)
         {
             ZPackage package = new ZPackage();
             package.Write((int)operation);
@@ -259,7 +395,143 @@ namespace TradersExtended
             package.Write(fileName ?? string.Empty);
             package.Write(message ?? string.Empty);
             package.Write(payload ?? string.Empty);
-            ZRoutedRpc.instance.InvokeRoutedRPC(target, ResponseRpc, package);
+            WriteCorrelation(package, requestId);
+            if (package.Size() > MaximumPackageBytes)
+                throw new InvalidDataException("The configuration response exceeds the editor transfer limit.");
+            SendPackage(target, ResponseRpc, ResponseChunkRpc, package, operation, requestId);
+        }
+
+        private static void SendPackage(ZRpc rpc, string method, string chunkMethod, ZPackage package, ConfigEditorOperation operation, long id)
+        {
+            if (package.Size() <= EditorTransferBuffer.ChunkBytes)
+            {
+                rpc.Invoke(method, package);
+                return;
+            }
+            byte[] bytes = package.GetArray();
+            for (int offset = 0; offset < bytes.Length; offset += EditorTransferBuffer.ChunkBytes)
+            {
+                int count = Math.Min(EditorTransferBuffer.ChunkBytes, bytes.Length - offset);
+                byte[] chunk = new byte[count];
+                Buffer.BlockCopy(bytes, offset, chunk, 0, count);
+                ZPackage part = new ZPackage();
+                part.Write(id);
+                part.Write((int)operation);
+                part.Write(bytes.Length);
+                part.Write(offset);
+                part.Write(chunk);
+                rpc.Invoke(chunkMethod, part);
+            }
+        }
+
+        private static byte[] ReadChunk(ZPackage package, out long id, out int operation, out int length, out int offset)
+        {
+            if (package == null || package.Size() < 25 || package.Size() > EditorTransferBuffer.ChunkBytes + 24)
+                throw new InvalidDataException("Invalid configuration transfer chunk size.");
+            id = package.ReadLong();
+            operation = package.ReadInt();
+            length = package.ReadInt();
+            offset = package.ReadInt();
+            int countPosition = package.GetPos();
+            int count = package.ReadInt();
+            if (count <= 0 || count > EditorTransferBuffer.ChunkBytes || count != package.Size() - package.GetPos())
+                throw new InvalidDataException("Invalid configuration transfer chunk payload.");
+            package.SetPos(countPosition);
+            return package.ReadByteArray();
+        }
+
+        private static void RPC_RequestChunk(ZRpc sender, ZPackage package)
+        {
+            if (ZNet.instance == null || !ZNet.instance.IsServer() || !IsSenderAdmin(sender))
+                return;
+            try
+            {
+                byte[] chunk = ReadChunk(package, out long id, out int operation, out int length, out int offset);
+                if (operation != (int)ConfigEditorOperation.Write && operation != (int)ConfigEditorOperation.Create)
+                    throw new InvalidDataException("This operation does not accept request chunks.");
+                float now = Time.realtimeSinceStartup;
+                foreach (ZRpc expired in incomingRequests.Where(pair => now - pair.Value.LastActivity > RequestTimeoutSeconds)
+                    .Select(pair => pair.Key).ToList())
+                    incomingRequests.Remove(expired);
+                if (offset == 0)
+                    incomingRequests[sender] = new EditorTransferBuffer(id, operation, length, MaximumPackageBytes, now);
+                if (!incomingRequests.TryGetValue(sender, out EditorTransferBuffer transfer))
+                    return;
+                byte[] completed = transfer.Add(id, operation, length, offset, chunk, now);
+                if (offset % (EditorTransferBuffer.ChunkBytes * 8) == 0)
+                {
+                    ZPackage progress = new ZPackage();
+                    progress.Write(id);
+                    sender.Invoke(ProgressRpc, progress);
+                }
+                if (completed != null)
+                {
+                    incomingRequests.Remove(sender);
+                    ZPackage request = new ZPackage(completed);
+                    if (PeekCorrelation(request) != id)
+                        throw new InvalidDataException("Configuration transfer correlation mismatch.");
+                    RPC_Request(sender, request);
+                }
+            }
+            catch (Exception exception)
+            {
+                incomingRequests.Remove(sender);
+                TradersExtended.LogWarning($"Invalid configuration editor transfer: {exception.Message}");
+            }
+        }
+
+        private static void RPC_TransferProgress(ZRpc sender, ZPackage package)
+        {
+            RefreshRemoteAdminState();
+            if (UsesRemoteServer && ReferenceEquals(sender, remoteServerRpc) && activeRequest != null &&
+                package != null && package.Size() == 8 && package.ReadLong() == activeRequest.Id)
+            {
+                activeRequest.StartedAt = Time.realtimeSinceStartup;
+                TransferProgress?.Invoke();
+            }
+        }
+
+        private static void RPC_ResponseChunk(ZRpc sender, ZPackage package)
+        {
+            RefreshRemoteAdminState();
+            if (!UsesRemoteServer || activeRequest == null || !ReferenceEquals(sender, remoteServerRpc))
+                return;
+            try
+            {
+                byte[] chunk = ReadChunk(package, out long id, out int operation, out int length, out int offset);
+                if (id != activeRequest.Id || operation != (int)activeRequest.Operation)
+                    return;
+                float now = Time.realtimeSinceStartup;
+                if (offset == 0)
+                    incomingResponse = new EditorTransferBuffer(id, operation, length, MaximumPackageBytes, now);
+                if (incomingResponse == null)
+                    return;
+                byte[] completed = incomingResponse.Add(id, operation, length, offset, chunk, now);
+                activeRequest.StartedAt = now;
+                TransferProgress?.Invoke();
+                if (completed != null)
+                {
+                    incomingResponse = null;
+                    RPC_Response(sender, new ZPackage(completed));
+                }
+            }
+            catch (Exception exception)
+            {
+                PendingRequest failed = activeRequest;
+                CancelPendingRequest();
+                if (failed != null)
+                    Emit(failed.Operation, false, failed.FileName, "Invalid configuration transfer: " + exception.Message, string.Empty);
+            }
+        }
+
+        [HarmonyPatch(typeof(ZNet), nameof(ZNet.Disconnect), new Type[] { typeof(ZNetPeer) })]
+        private static class ZNet_Disconnect_ClearEditorTransfer
+        {
+            private static void Prefix(ZNetPeer peer)
+            {
+                if (peer?.m_rpc != null)
+                    incomingRequests.Remove(peer.m_rpc);
+            }
         }
 
         private static void ExecuteRequest(
@@ -292,10 +564,7 @@ namespace TradersExtended
                         if (!File.Exists(path))
                             throw new FileNotFoundException("The selected configuration file no longer exists.", fileName);
 
-                        string fileContent;
-                        using (FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
-                        using (StreamReader reader = new StreamReader(stream, Encoding.UTF8, true))
-                            fileContent = reader.ReadToEnd();
+                        string fileContent = ConfigPersistence.ReadBounded(path);
 
                         responder(operation, true, fileName, "Configuration loaded.", fileContent);
                         break;
@@ -306,11 +575,14 @@ namespace TradersExtended
                         string path = GetSafePath(fileName);
                         if (operation == ConfigEditorOperation.Create && File.Exists(path))
                             throw new IOException("A configuration file with this name already exists.");
+                        if (Encoding.UTF8.GetByteCount(content ?? string.Empty) > ConfigPersistence.MaximumFileBytes)
+                            throw new InvalidDataException("The configuration exceeds the 8 MiB editor file limit.");
                         if (!ConfigEditorSerialization.Validate(fileName, content, out string validationError))
                             throw new InvalidDataException(validationError);
 
-                        File.WriteAllText(path, content ?? string.Empty, new UTF8Encoding(false));
-                        TradersExtended.ReadConfigs();
+                        ConfigPersistence.WriteAtomically(path, content, operation == ConfigEditorOperation.Create);
+                        if (!TradersExtended.ReadConfigs())
+                            throw new InvalidOperationException("The file was saved, but configuration reload failed. The previous runtime configuration remains active; check the server log.");
                         string message = operation == ConfigEditorOperation.Create
                             ? "Configuration created and reloaded."
                             : "Configuration saved and reloaded.";
@@ -322,7 +594,8 @@ namespace TradersExtended
                         string path = GetSafePath(fileName, requireSupportedPattern: false);
                         if (File.Exists(path))
                             File.Delete(path);
-                        TradersExtended.ReadConfigs();
+                        if (!TradersExtended.ReadConfigs())
+                            throw new InvalidOperationException("The file was deleted, but configuration reload failed. The previous runtime configuration remains active; check the server log.");
                         responder(operation, true, fileName, "Configuration deleted and reloaded.", string.Empty);
                         break;
                     }
@@ -366,7 +639,8 @@ namespace TradersExtended
 
         private static string GetSafePath(string fileName, bool requireSupportedPattern = true)
         {
-            if (string.IsNullOrWhiteSpace(fileName) ||
+            if (string.IsNullOrWhiteSpace(fileName) || fileName.Contains("/") || fileName.Contains("\\") ||
+                fileName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
                 !string.Equals(fileName, Path.GetFileName(fileName), StringComparison.Ordinal) ||
                 !TradersExtended.IsSupportedConfigExtension(Path.GetExtension(fileName)) ||
                 (requireSupportedPattern &&
@@ -378,19 +652,18 @@ namespace TradersExtended
             string path = Path.GetFullPath(Path.Combine(directory, fileName));
             if (!path.StartsWith(directory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("The selected path is outside the Traders Extended configuration directory.");
+            if (File.Exists(path) && (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidDataException("Symbolic links are not editable configuration files.");
             return path;
         }
 
-        private static bool IsSenderAdmin(long sender)
+        private static bool IsSenderAdmin(ZRpc sender)
         {
             ZNet znet = ZNet.instance;
             if (znet == null || !znet.IsServer())
                 return false;
-            if (ZRoutedRpc.instance != null && sender == ZRoutedRpc.instance.m_id)
-                return true;
-
             ZNetPeer peer = znet.GetPeer(sender);
-            if (peer == null || peer.m_socket == null || znet.m_adminList == null)
+            if (peer == null || !peer.IsReady() || peer.m_socket == null || znet.m_adminList == null)
                 return false;
 
             string hostName = peer.m_socket.GetHostName();
@@ -403,12 +676,12 @@ namespace TradersExtended
         }
     }
 
-    [HarmonyPatch(typeof(ZNet), nameof(ZNet.Awake))]
-    internal static class ZNet_Awake_RegisterConfigEditorRpc
+    [HarmonyPatch(typeof(ZNet), nameof(ZNet.OnNewConnection))]
+    internal static class ZNet_OnNewConnection_RegisterConfigEditorRpc
     {
-        private static void Postfix()
+        private static void Postfix(ZNetPeer peer)
         {
-            ConfigEditorTransport.RegisterRpc();
+            ConfigEditorTransport.RegisterRpc(peer);
         }
     }
 }

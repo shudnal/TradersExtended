@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -329,7 +329,7 @@ namespace TradersExtended
             {
                 TraderSettingType.Boolean => token.Value<bool>(),
                 TraderSettingType.Integer => token.Value<int>(),
-                TraderSettingType.Float => token.Value<float>(),
+                TraderSettingType.Float => ParseFiniteFloat(token),
                 TraderSettingType.String => TokenToString(token),
                 TraderSettingType.ItemPrefab => TokenToString(token),
                 TraderSettingType.Vector2 => ParseVector2(token),
@@ -369,7 +369,10 @@ namespace TradersExtended
             if (token.Type == JTokenType.String)
                 return token.Value<string>() ?? string.Empty;
             if (token is JArray array)
-                return string.Join(",", array.Select(item => item.ToString(Formatting.None)));
+                return string.Join(",", array.Select(item => item.Type == JTokenType.String ? item.Value<string>() : item.ToString(Formatting.None)));
+            if (token is JObject obj)
+                return string.Join(",", obj.Properties().Select(property => property.Name + ":" +
+                    (property.Value.Type == JTokenType.String ? property.Value.Value<string>() : property.Value.ToString(Formatting.None))));
             return token.ToString(Formatting.None);
         }
 
@@ -380,10 +383,20 @@ namespace TradersExtended
 
             JToken x = obj.GetValue("x", StringComparison.OrdinalIgnoreCase);
             JToken y = obj.GetValue("y", StringComparison.OrdinalIgnoreCase);
-            if (x == null || y == null)
+            if (x == null || y == null ||
+                (x.Type != JTokenType.Integer && x.Type != JTokenType.Float) ||
+                (y.Type != JTokenType.Integer && y.Type != JTokenType.Float))
                 throw new FormatException("Expected an object with numeric x and y fields.");
 
-            return new Vector2(x.Value<float>(), y.Value<float>());
+            return new Vector2(ParseFiniteFloat(x), ParseFiniteFloat(y));
+        }
+
+        private static float ParseFiniteFloat(JToken token)
+        {
+            float value = token.Value<float>();
+            if (float.IsNaN(value) || float.IsInfinity(value))
+                throw new FormatException("Expected a finite number.");
+            return value;
         }
 
         private static bool ContainsTrader(string value, string trader)
@@ -453,7 +466,7 @@ namespace TradersExtended
 
             if (extension == ".yaml" || extension == ".yml")
             {
-                object plain = JsonConvert.DeserializeObject<object>((root ?? new JObject()).ToString(Formatting.None));
+                object plain = ConfigPersistence.ToPlainData(root ?? new JObject());
                 ISerializer serializer = new SerializerBuilder().DisableAliases().Build();
                 return serializer.Serialize(plain);
             }

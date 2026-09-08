@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using TradersExtended.Compatibility;
@@ -164,6 +164,7 @@ namespace TradersExtended
         {
             if (instance != null && instance != this)
                 return;
+            ConfigEditorTransport.Update();
             configEditor?.Update();
             AmountDialog.Update();
         }
@@ -195,6 +196,7 @@ namespace TradersExtended
             itemConfigs.ValueChanged -= StartConfigLoad;
             traderConfigFiles.ValueChanged -= TraderConfigManager.LoadSyncedConfigs;
             BuybackManager.ResetCache();
+            CoinsPatches.RestoreAll();
             configEditor?.Dispose();
             configEditor = null;
             Config.Save();
@@ -238,6 +240,9 @@ namespace TradersExtended
             coinsPatch = config("Item coins", "Change values", false, "Change properties of the Coins item.");
             coinsWeight = config("Item coins", "Coins weight", 0f, "Weight of one coin.");
             coinsStackSize = config("Item coins", "Coins stack size", 2000, "Maximum coin stack size.");
+            coinsPatch.SettingChanged += delegate { CoinsPatches.UpdateCoinsPrefab(); };
+            coinsWeight.SettingChanged += delegate { CoinsPatches.UpdateCoinsPrefab(); };
+            coinsStackSize.SettingChanged += delegate { CoinsPatches.UpdateCoinsPrefab(); };
 
             traderRepair = config("Trader repair", "Traders can repair items", true, "Allow configured traders to repair items.");
             tradersToRepairWeapons = config("Trader repair", "Traders capable to repair weapons", "Haldor", "Comma-separated trader prefab names that can repair weapons.");
@@ -543,12 +548,12 @@ namespace TradersExtended
             if (directory == null || !directory.Exists)
                 return;
 
-            FileSystemWatcher watcher = new FileSystemWatcher(directory.FullName, pluginID + ".*")
+            FileSystemWatcher watcher = new FileSystemWatcher(directory.FullName, "*")
             {
                 IncludeSubdirectories = true,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.Size,
                 SynchronizingObject = ThreadingHelper.SynchronizingObject,
-                EnableRaisingEvents = true
+                EnableRaisingEvents = false
             };
 
             watcher.Changed += OnConfigFileChanged;
@@ -556,6 +561,7 @@ namespace TradersExtended
             watcher.Deleted += OnConfigFileChanged;
             watcher.Renamed += OnConfigFileChanged;
             configWatchers.Add(watcher);
+            watcher.EnableRaisingEvents = true;
         }
 
         private static void DisposeConfigWatchers()
@@ -578,15 +584,25 @@ namespace TradersExtended
             if (args == null || instance == null)
                 return;
 
-            bool supported = IsSupportedConfigExtension(Path.GetExtension(args.FullPath));
+            bool supported = IsWatchedConfigPath(args.FullPath);
             if (!supported && args is RenamedEventArgs renamed)
-                supported = IsSupportedConfigExtension(Path.GetExtension(renamed.OldFullPath));
+                supported = IsWatchedConfigPath(renamed.OldFullPath);
             if (!supported)
                 return;
 
             if (configReloadCoroutine != null)
                 instance.StopCoroutine(configReloadCoroutine);
             configReloadCoroutine = instance.StartCoroutine(ReloadConfigsAfterFileWrite());
+        }
+
+        private static bool IsWatchedConfigPath(string path)
+        {
+            string name = Path.GetFileName(path);
+            if (!TryParseConfigFileName(name, out _, out _) && !TryParseTraderConfigFileName(name, out _))
+                return false;
+            string directory = Path.GetFullPath(Path.Combine(Paths.ConfigPath, pluginID)) + Path.DirectorySeparatorChar;
+            return name.StartsWith(pluginID + ".", StringComparison.OrdinalIgnoreCase) ||
+                Path.GetFullPath(path).StartsWith(directory, StringComparison.OrdinalIgnoreCase);
         }
 
         private static IEnumerator ReloadConfigsAfterFileWrite()
@@ -602,23 +618,36 @@ namespace TradersExtended
             internal string Content;
         }
 
-        internal static void ReadConfigs()
+        internal static bool ReadConfigs()
         {
-            Dictionary<string, string> localItemConfigs = new Dictionary<string, string>(StringComparer.Ordinal);
-            Dictionary<string, PersonalTraderConfigSource> localTraderConfigs =
-                new Dictionary<string, PersonalTraderConfigSource>(StringComparer.OrdinalIgnoreCase);
-            int index = 0;
+            try
+            {
+                Dictionary<string, string> localItemConfigs = new Dictionary<string, string>(StringComparer.Ordinal);
+                Dictionary<string, PersonalTraderConfigSource> localTraderConfigs =
+                    new Dictionary<string, PersonalTraderConfigSource>(StringComparer.OrdinalIgnoreCase);
+                int index = AddEmbeddedConfigs(localItemConfigs, localTraderConfigs, 0);
+                AddDirectoryConfigs(localItemConfigs, localTraderConfigs, configDirectory, "config", index);
 
-            index = AddEmbeddedConfigs(localItemConfigs, localTraderConfigs, index);
-            AddDirectoryConfigs(localItemConfigs, localTraderConfigs, configDirectory, "config", index);
+                // Validate the complete snapshot before replacing any active or synchronized data.
+                // A temporarily locked or half-written file is not an intentional deletion.
+                foreach (KeyValuePair<string, string> item in localItemConfigs)
+                    if (TryParseSyncedConfigKey(item.Key, out _, out _, out string fileName) && DeserializeItems(item.Value, fileName) == null)
+                        throw new InvalidDataException($"Invalid item configuration '{fileName}'.");
+                foreach (PersonalTraderConfigSource item in localTraderConfigs.Values)
+                    if (TraderConfigManager.DeserializeTraderConfig(item.Content, item.FileName) == null)
+                        throw new InvalidDataException($"Invalid personal trader configuration '{item.FileName}'.");
 
-            Dictionary<string, string> synchronizedTraderConfigs = localTraderConfigs.ToDictionary(
-                pair => BuildSyncedTraderConfigKey(pair.Key, pair.Value.FileName),
-                pair => pair.Value.Content,
-                StringComparer.Ordinal);
-
-            traderConfigFiles.AssignLocalValueAndNotify(synchronizedTraderConfigs);
-            itemConfigs.AssignLocalValueAndNotify(localItemConfigs);
+                Dictionary<string, string> synchronizedTraderConfigs = localTraderConfigs.ToDictionary(
+                    pair => BuildSyncedTraderConfigKey(pair.Key, pair.Value.FileName), pair => pair.Value.Content, StringComparer.Ordinal);
+                traderConfigFiles.AssignLocalValueAndNotify(synchronizedTraderConfigs);
+                itemConfigs.AssignLocalValueAndNotify(localItemConfigs);
+                return true;
+            }
+            catch (Exception exception)
+            {
+                LogWarning($"Configuration reload was not applied; the last valid snapshot is retained: {exception.Message}");
+                return false;
+            }
         }
 
         private static int AddDirectoryConfigs(
@@ -650,8 +679,7 @@ namespace TradersExtended
             }
             catch (Exception exception)
             {
-                LogWarning($"Could not enumerate config files in '{directory.FullName}': {exception.Message}");
-                return index;
+                throw new IOException($"Could not read configuration source '{directory.FullName}'.", exception);
             }
 
             foreach (FileInfo file in files.Where(file => TryParseConfigFileName(file.Name, out _, out _)))
@@ -665,7 +693,7 @@ namespace TradersExtended
                 }
                 catch (Exception exception)
                 {
-                    LogWarning($"Error reading item config '{file.FullName}': {exception.Message}");
+                    throw new IOException($"Could not read configuration source '{file.FullName}'.", exception);
                 }
             }
 
@@ -689,7 +717,7 @@ namespace TradersExtended
                 }
                 catch (Exception exception)
                 {
-                    LogWarning($"Error reading personal trader config '{selected.FullName}': {exception.Message}");
+                    throw new IOException($"Could not read configuration source '{selected.FullName}'.", exception);
                 }
             }
 
@@ -736,7 +764,7 @@ namespace TradersExtended
                 }
                 catch (Exception exception)
                 {
-                    LogWarning($"Error reading embedded item config '{resource}': {exception.Message}");
+                    throw new IOException($"Could not read configuration source '{resource}'.", exception);
                 }
             }
 
@@ -777,7 +805,7 @@ namespace TradersExtended
                 }
                 catch (Exception exception)
                 {
-                    LogWarning($"Error reading embedded personal trader config '{selected.Resource}': {exception.Message}");
+                    throw new IOException($"Could not read configuration source '{selected.Resource}'.", exception);
                 }
             }
 
@@ -1023,8 +1051,8 @@ namespace TradersExtended
         {
             yield return null;
 
-            tradeableItems.Clear();
-            sellableItems.Clear();
+            Dictionary<string, List<TradeableItem>> stagedBuy = new Dictionary<string, List<TradeableItem>>();
+            Dictionary<string, List<TradeableItem>> stagedSell = new Dictionary<string, List<TradeableItem>>();
 
             Dictionary<string, string> synchronizedConfigs = itemConfigs.Value ?? new Dictionary<string, string>();
             foreach (KeyValuePair<string, string> itemConfig in synchronizedConfigs
@@ -1036,10 +1064,13 @@ namespace TradersExtended
                     continue;
                 List<TradeableItem> items = DeserializeItems(itemConfig.Value, fileName);
                 if (items == null)
-                    continue;
+                {
+                    configLoadCoroutine = null;
+                    yield break;
+                }
 
                 string listKey = TraderListKey(trader, listType);
-                Dictionary<string, List<TradeableItem>> destination = listType == ItemsListType.Buy ? tradeableItems : sellableItems;
+                Dictionary<string, List<TradeableItem>> destination = listType == ItemsListType.Buy ? stagedBuy : stagedSell;
                 if (!destination.TryGetValue(listKey, out List<TradeableItem> currentItems))
                 {
                     currentItems = new List<TradeableItem>();
@@ -1050,7 +1081,14 @@ namespace TradersExtended
                 LogInfo($"Loaded {items.Count} {listType.ToString().ToLowerInvariant()} item entries from {fileName}");
             }
 
-            yield return AddCommonValuableItems();
+            yield return AddCommonValuableItems(stagedSell);
+            tradeableItems.Clear();
+            sellableItems.Clear();
+            foreach (KeyValuePair<string, List<TradeableItem>> list in stagedBuy)
+                tradeableItems.Add(list.Key, list.Value);
+            foreach (KeyValuePair<string, List<TradeableItem>> list in stagedSell)
+                sellableItems.Add(list.Key, list.Value);
+            TraderConfigManager.Invalidate();
 
             TooltipPrices.Rebuild();
             configLoadCoroutine = null;
@@ -1146,7 +1184,7 @@ namespace TradersExtended
 
         private static List<TradeableItem> DeserializeCsvItems(string content, string source)
         {
-            List<List<string>> rows = ParseCsv(content);
+            List<List<string>> rows = CsvRecords.Parse(content);
             if (rows.Count == 0)
                 return new List<TradeableItem>();
 
@@ -1170,6 +1208,10 @@ namespace TradersExtended
             if (!headers.Any(header => string.Equals(header, nameof(TradeableItem.prefab), StringComparison.OrdinalIgnoreCase)))
                 throw new FormatException("CSV item configs must contain the 'prefab' header.");
 
+            if (headers.Where(header => !string.IsNullOrWhiteSpace(header))
+                .GroupBy(header => header, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+                throw new FormatException("CSV contains duplicate column headers.");
+
             string[] unknownHeaders = headers.Where(header => !string.IsNullOrWhiteSpace(header) && !supportedHeaders.Contains(header)).ToArray();
             if (unknownHeaders.Length > 0)
                 LogWarning($"Ignored unknown CSV headers in '{source}': {string.Join(", ", unknownHeaders)}");
@@ -1180,6 +1222,9 @@ namespace TradersExtended
                 List<string> row = rows[rowIndex];
                 if (row.All(string.IsNullOrWhiteSpace))
                     continue;
+
+                if (row.Skip(headers.Length).Any(value => !string.IsNullOrWhiteSpace(value)))
+                    throw new FormatException($"CSV row {rowIndex + 1} has more values than its header.");
 
                 TradeableItem item = new TradeableItem();
                 for (int column = 0; column < headers.Length; column++)
@@ -1232,84 +1277,15 @@ namespace TradersExtended
             throw new FormatException($"Invalid integer '{value}' in row {row}, column '{header}' of '{source}'.");
         }
 
-        private static List<List<string>> ParseCsv(string content)
-        {
-            List<List<string>> rows = new List<List<string>>();
-            List<string> row = new List<string>();
-            StringBuilder field = new StringBuilder();
-            bool quoted = false;
-
-            for (int index = 0; index < content.Length; index++)
-            {
-                char current = content[index];
-                if (quoted)
-                {
-                    if (current == '"')
-                    {
-                        if (index + 1 < content.Length && content[index + 1] == '"')
-                        {
-                            field.Append('"');
-                            index++;
-                        }
-                        else
-                        {
-                            quoted = false;
-                        }
-                    }
-                    else
-                    {
-                        field.Append(current);
-                    }
-
-                    continue;
-                }
-
-                if (current == '"' && field.Length == 0)
-                {
-                    quoted = true;
-                }
-                else if (current == ',')
-                {
-                    row.Add(field.ToString());
-                    field.Clear();
-                }
-                else if (current == '\r' || current == '\n')
-                {
-                    if (current == '\r' && index + 1 < content.Length && content[index + 1] == '\n')
-                        index++;
-
-                    row.Add(field.ToString());
-                    field.Clear();
-                    rows.Add(row);
-                    row = new List<string>();
-                }
-                else
-                {
-                    field.Append(current);
-                }
-            }
-
-            if (quoted)
-                throw new FormatException("CSV contains an unterminated quoted field.");
-
-            if (field.Length > 0 || row.Count > 0)
-            {
-                row.Add(field.ToString());
-                rows.Add(row);
-            }
-
-            return rows;
-        }
-
-        private static IEnumerator AddCommonValuableItems()
+        private static IEnumerator AddCommonValuableItems(Dictionary<string, List<TradeableItem>> destination)
         {
             yield return new WaitUntil(delegate { return ObjectDB.instance != null; });
 
             string listKey = CommonListKey(ItemsListType.Sell);
-            if (!sellableItems.TryGetValue(listKey, out List<TradeableItem> commonItems))
+            if (!destination.TryGetValue(listKey, out List<TradeableItem> commonItems))
             {
                 commonItems = new List<TradeableItem>();
-                sellableItems[listKey] = commonItems;
+                destination[listKey] = commonItems;
             }
 
             HashSet<string> existingPrefabs = new HashSet<string>(
