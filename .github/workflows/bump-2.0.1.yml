@@ -1,0 +1,49 @@
+name: Apply 2.0.1 release metadata
+on:
+  push:
+    branches: [fix/trade-focus-stack-dialog-review]
+    paths: ['.github/workflows/bump-2.0.1.yml']
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Stage 2.0.1 release metadata'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Set release version to 2.0.1
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              file = Path(path)
+              text = file.read_text(encoding='utf-8-sig')
+              count = text.count(old)
+              if count != 1:
+                  raise RuntimeError(f'{path}: expected one replacement target, found {count}')
+              file.write_text(text.replace(old, new), encoding='utf-8')
+
+          replace_once('TradersExtended.cs', 'public const string pluginVersion = "2.0.0";', 'public const string pluginVersion = "2.0.1";')
+          replace_once('package/thunderstore/TradersExtended/manifest.json', '"version_number": "2.0.0"', '"version_number": "2.0.1"')
+          replace_once('package/nexus/manifest.json', '"version":  "2.0.0"', '"version":  "2.0.1"')
+          replace_once('package/thunderstore/TradersExtended/CHANGELOG.md', '# Unreleased', '# 2.0.1')
+          replace_once('tests/check_repository.py', "manifest['version_number'] == '2.0.0'", "manifest['version_number'] == '2.0.1'")
+          replace_once('docs/reviews/2026-09-07-repository-review.md', 'The package/mod version remains `2.0.0`.', 'The package/mod release version for this change is `2.0.1`.')
+      - name: Run source-only checks
+        run: |
+          python tests/check_repository.py
+          git diff --check
+      - name: Commit version metadata and remove temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Suden'
+          git config user.email '20457922+shudnal@users.noreply.github.com'
+          git add TradersExtended.cs package/thunderstore/TradersExtended/manifest.json package/nexus/manifest.json package/thunderstore/TradersExtended/CHANGELOG.md tests/check_repository.py docs/reviews/2026-09-07-repository-review.md
+          git rm .github/workflows/bump-2.0.1.yml
+          git commit -m 'Release version 2.0.1'
+          git push origin HEAD:refs/heads/fix/trade-focus-stack-dialog-review
