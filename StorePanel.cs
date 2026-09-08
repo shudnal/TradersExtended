@@ -180,13 +180,35 @@ namespace TradersExtended
         {
             if (store?.m_trader == null || offer?.m_prefab == null || Player.m_localPlayer == null || ItemToSell.IsBuyBackItem(offer))
                 return 0;
+
             TradeableItem.GetStackQualityFromStack(offer.m_stack, out int lotSize, out int quality);
             ItemDrop.ItemData item = offer.m_prefab.m_itemData;
             quality = quality == 0 ? item.m_quality : quality;
             Inventory inventory = Player.m_localPlayer.GetInventory();
-            return TradeAmounts.MaximumBuyLots(lotSize, offer.m_price,
-                TradeInventory.CountCurrency(inventory, TraderCurrency.GetCurrency(offer, store)),
-                TradeInventory.Capacity(inventory, item, quality, Game.m_worldLevel));
+            ItemDrop currency = TraderCurrency.GetCurrency(offer, store);
+            int currencyAmount = TradeInventory.CountCurrency(inventory, currency);
+            int candidate = TradeAmounts.MaximumBuyLots(lotSize, offer.m_price, currencyAmount, int.MaxValue);
+
+            // Paying happens before the purchased item is inserted. A full inventory can therefore
+            // still accept the purchase when the payment empties a currency stack. Capacity is
+            // monotonic with the amount paid; iteratively reduce the candidate to the capacity that
+            // exists after its own payment plan until the greatest feasible whole-lot count is found.
+            while (candidate > 0)
+            {
+                if (!TradeAmounts.TryGetPrice(offer.m_price, candidate, 1d, out int price) ||
+                    !TradeInventory.PlanRemoval(inventory,
+                        inventory.GetAllItems().Where(existing => TradeInventory.MatchesCurrency(existing, currency)),
+                        price, out List<TradeInventory.Removal> payment))
+                    return 0;
+
+                int capacity = TradeInventory.CapacityAfterRemoval(inventory, item, quality, Game.m_worldLevel, payment);
+                int capacityLots = capacity / lotSize;
+                if (capacityLots >= candidate)
+                    return candidate;
+                candidate = capacityLots;
+            }
+
+            return 0;
         }
 
         // Keep calling the public StoreGui entry point so other mods' purchase prefixes/postfixes still run.
@@ -647,7 +669,8 @@ namespace TradersExtended
         private static bool SameBuyOffer(Trader.TradeItem first, Trader.TradeItem second)
         {
             return first != null && second != null && first.m_prefab == second.m_prefab &&
-                first.m_stack == second.m_stack && first.m_requiredGlobalKey == second.m_requiredGlobalKey &&
+                first.m_stack == second.m_stack && first.m_price == second.m_price &&
+                first.m_requiredGlobalKey == second.m_requiredGlobalKey &&
                 SameCurrency(TraderCurrency.GetCurrency(first, StoreGui.instance), TraderCurrency.GetCurrency(second, StoreGui.instance));
         }
 

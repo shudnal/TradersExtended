@@ -81,6 +81,47 @@ namespace TradersExtended
             return TradeAmounts.ClampBalance(free);
         }
 
+        internal static int CapacityAfterRemoval(Inventory inventory, ItemDrop.ItemData item, int quality, int worldLevel,
+            IEnumerable<Removal> removal)
+        {
+            if (inventory == null || item?.m_shared == null || item.m_shared.m_maxStackSize <= 0)
+                return 0;
+
+            Dictionary<ItemDrop.ItemData, int> removedAmounts = new Dictionary<ItemDrop.ItemData, int>();
+            if (removal != null)
+                foreach (Removal part in removal)
+                {
+                    if (part?.Item == null || part.Amount <= 0 || !inventory.ContainsItem(part.Item))
+                        return 0;
+                    long combined = (long)(removedAmounts.TryGetValue(part.Item, out int current) ? current : 0) + part.Amount;
+                    if (combined > part.Item.m_stack)
+                        return 0;
+                    removedAmounts[part.Item] = (int)combined;
+                }
+
+            int maximumStack = item.m_shared.m_maxStackSize;
+            int emptySlots = Math.Max(inventory.GetEmptySlots(), 0);
+            long free = 0;
+            foreach (ItemDrop.ItemData existing in inventory.GetAllItems())
+            {
+                int removed = removedAmounts.TryGetValue(existing, out int planned) ? planned : 0;
+                int remaining = existing.m_stack - removed;
+                if (remaining <= 0)
+                {
+                    if (existing.m_stack > 0)
+                        emptySlots++;
+                    continue;
+                }
+
+                if (maximumStack > 1 && existing.m_shared.m_name == item.m_shared.m_name &&
+                    existing.m_quality == quality && existing.m_worldLevel == worldLevel)
+                    free += Math.Max(existing.m_shared.m_maxStackSize - remaining, 0);
+            }
+
+            free += (long)emptySlots * maximumStack;
+            return TradeAmounts.ClampBalance(free);
+        }
+
         internal static bool PlanRemoval(Inventory inventory, IEnumerable<ItemDrop.ItemData> candidates, int amount, out List<Removal> plan)
         {
             plan = new List<Removal>();

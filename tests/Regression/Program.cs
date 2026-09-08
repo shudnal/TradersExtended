@@ -94,6 +94,27 @@ internal static class Program
         Check(TradeInventory.Capacity(inventory, coins.m_itemData, 2, 1) == 0, "Wrong quality cannot supply stack capacity");
         Check(TradeInventory.PlanRemoval(inventory, new[] { payable, payable }, 8, out var plan) && plan.Count == 1, "Removal plan deduplicates references");
         Check(!TradeInventory.PlanRemoval(inventory, new[] { payable }, 9, out _), "Ineligible stacks cannot make up a shortage");
+
+        var purchase = Prefab("Purchase", 50);
+        var blocker = Prefab("Blocker", 1);
+        inventory = new Inventory { Slots = 2 };
+        var paymentStack = Stack(coins, 10, world: 1);
+        inventory.m_inventory.AddRange(new[] { paymentStack, Stack(blocker, 1, world: 1) });
+        Check(TradeInventory.Capacity(inventory, purchase.m_itemData, 1, 1) == 0, "Full inventory has no pre-payment purchase capacity");
+        Check(TradeInventory.PlanRemoval(inventory, new[] { paymentStack }, 10, out var fullPayment) &&
+            TradeInventory.CapacityAfterRemoval(inventory, purchase.m_itemData, 1, 1, fullPayment) == 50,
+            "A payment that consumes a currency stack exposes the freed slot to purchase preflight");
+        Check(TradeInventory.PlanRemoval(inventory, new[] { paymentStack }, 5, out var partialPayment) &&
+            TradeInventory.CapacityAfterRemoval(inventory, purchase.m_itemData, 1, 1, partialPayment) == 0,
+            "A partial payment does not invent an empty slot");
+        Check(TradeInventory.CapacityAfterRemoval(inventory, coins.m_itemData, 1, 1, partialPayment) == 95,
+            "When the bought item is also the currency, planned removal exposes stack space without double-counting slots");
+
+        inventory = new Inventory { Slots = 3 };
+        old = Stack(coins, 70, world: 0);
+        payable = Stack(coins, 8, world: 1);
+        inventory.m_inventory.AddRange(new[] { old, payable, Stack(impostor, 90, world: 1) });
+        Check(TradeInventory.PlanRemoval(inventory, new[] { payable }, 8, out plan), "Rollback payment plan is recreated after capacity scenarios");
         using (var snapshot = new TradeInventory.Snapshot(inventory))
             Check(TradeInventory.Remove(inventory, plan), "Payment can be removed");
         Check(inventory.ContainsItem(payable) && payable.m_stack == 8 && ReferenceEquals(inventory.m_inventory[0], old), "Rollback restores original identities and quantities");

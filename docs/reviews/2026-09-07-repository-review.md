@@ -67,6 +67,11 @@ The temporary import files and recovery workflow are removed from the final bran
 - `PublishAll.cmd` reads the actual continuation answer using delayed expansion. The freshness receipt also covers
   the shipped icon and project property/solution files.
 
+## Codex follow-up review — 2026-09-08
+
+- Purchase capacity is evaluated against the projected inventory after its own currency-removal plan. A full inventory therefore no longer rejects a valid purchase when payment consumes a currency stack and frees the required slot. Partial payments do not create phantom slots, and same-item currency removal contributes only the resulting stack space.
+- Buy-offer restoration identity now includes `m_price`, preventing two otherwise identical configured offers with different prices from being silently interchanged after a list refresh.
+
 ## Validation
 
 No mod build, game run, C# regression execution, publishing operation, or runtime test was performed during this task.
