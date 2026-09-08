@@ -102,10 +102,14 @@ namespace TradersExtended
             List<PriceInfo> commonPrices = GetEffectivePrices(commonDisplaySource, quality);
 
             StringBuilder result = new StringBuilder();
-            result.Append("\n\n<color=#ffcc66>Trader value</color>");
+            result.Append("\n\n<color=#ffcc66>")
+                .Append(Localization.instance?.Localize("$item_value") ?? "$item_value").Append("</color>:");
             bool hasPrices = commonPrices.Count > 0;
-
-            AppendPriceLine(result, "Common", commonPrices, string.Empty);
+            if (hasPrices)
+            {
+                result.Append(' ');
+                AppendPrices(result, commonPrices, string.Empty);
+            }
 
             foreach (string traderName in traderNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase))
             {
@@ -198,6 +202,11 @@ namespace TradersExtended
                 return;
 
             result.Append('\n').Append(label).Append(": ");
+            AppendPrices(result, prices, currency);
+        }
+
+        private static void AppendPrices(StringBuilder result, List<PriceInfo> prices, string currency)
+        {
             for (int i = 0; i < prices.Count; i++)
             {
                 if (i > 0)
@@ -217,7 +226,8 @@ namespace TradersExtended
                 if (price.Stack > 1)
                     result.Append(" / x").Append(price.Stack);
                 if (price.Quality > 0)
-                    result.Append(" (quality ").Append(price.Quality).Append(')');
+                    result.Append(" (").Append(Localization.instance?.Localize("$item_quality") ?? "$item_quality")
+                        .Append(' ').Append(price.Quality).Append(')');
             }
         }
 
@@ -253,6 +263,35 @@ namespace TradersExtended
         [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetTooltip), new Type[] { typeof(ItemDrop.ItemData), typeof(int), typeof(bool), typeof(float), typeof(int) })]
         private static class ItemData_GetTooltip_AddTraderPrices
         {
+            private struct ItemValueState
+            {
+                internal ItemDrop.ItemData.SharedData SharedData;
+                internal int Value;
+            }
+
+            [HarmonyPriority(Priority.Last)]
+            private static void Prefix(ItemDrop.ItemData __0, out ItemValueState __state)
+            {
+                __state = default;
+                if (hideVanillaItemValue?.Value != true || __0?.m_shared == null)
+                    return;
+
+                // Retain the exact shared object and value for this call, including nested tooltip calls.
+                __state.SharedData = __0.m_shared;
+                __state.Value = __state.SharedData.m_value;
+                __state.SharedData.m_value = 0;
+            }
+
+            private static void Finalizer(ref ItemValueState __state)
+            {
+                if (__state.SharedData == null)
+                    return;
+
+                // Restore even after an exception or a setting change. Do not suppress the exception.
+                __state.SharedData.m_value = __state.Value;
+                __state = default;
+            }
+
             private static void Postfix(ItemDrop.ItemData __0, int __1, ref string __result)
             {
                 string prices = GetTooltip(__0, __1);

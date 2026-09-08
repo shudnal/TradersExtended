@@ -100,6 +100,7 @@ namespace TradersExtended
         internal static ConfigEntry<Vector2> storePanelOffset;
         internal static ConfigEntry<Vector2> amountDialogOffset;
         internal static ConfigEntry<bool> resetPanelPositionsOnOpen;
+        internal static ConfigEntry<bool> hideVanillaItemValue;
 
         public static ConfigEntry<bool> enableBuyBack;
         public static ConfigEntry<int> buybackLifetime;
@@ -242,6 +243,9 @@ namespace TradersExtended
                 "Reset both panel offsets whenever a new trader dialog is opened. [Not synchronized with server]");
             storePanelOffset.SettingChanged += delegate { StorePanel.SetStoreGuiPosition(); };
             amountDialogOffset.SettingChanged += delegate { AmountDialog.SetPanelPosition(); };
+
+            hideVanillaItemValue = Config.Bind("Item tooltips", "Hide vanilla item value", true,
+                "Hide the vanilla value line in all item tooltips, including coins. Trader price information remains visible for discovered traders. [Not synchronized with server]");
 
             checkForDiscovery = config("Item discovery", "Sell only discovered items", true, "A trader will not sell items that the buyer has not discovered.");
             checkForDiscoveryIgnoreItems = config("Item discovery", "Undiscovered items list to sell", "", "Comma-separated prefab names that bypass the discovery check. Vanilla trader items are included by default.");

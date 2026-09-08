@@ -390,11 +390,21 @@ The amount dialog, affordability checks, list icons, sale payouts, buyback, and 
 
 ## Price tooltips
 
-Items with entries in sell configs receive a `Trader value` section in their normal tooltip. Prices are hidden until
-the corresponding trader's static location icon has been revealed on the map. Before any trader is discovered, the
-entire section is hidden. Explicit common values are shown first, followed by discovered trader-specific values.
-Automatically generated common values are shown as common when enabled for every discovered trader; otherwise they
-are shown only for traders whose personal or BepInEx settings enable `Add common valuable items to sell list`.
+Items with entries in sell configs receive a localized `Value` section in their normal tooltip. The heading uses
+Valheim's `$item_value` token, and quality labels use `$item_quality`. Common prices, including their currency, stack
+and quality where applicable, appear directly after the heading's colon rather than on a separate Common line.
+Without a common price, the heading has no inline amount. Discovered trader-specific values follow on separate lines
+with uncolored trader names. Prices remain base configuration values, before the current flexible-pricing modifier.
+
+`Item tooltips / Hide vanilla item value` is enabled by default and is local-only. It suppresses the vanilla value
+line for all items, including coins, independently of whether any trader prices are available. The underlying item
+value is restored after tooltip generation, including when generation throws; sale prices are not changed. Disable
+this setting to retain the vanilla value line alongside the trader price section.
+
+Prices are hidden until the corresponding trader's static location icon has been revealed on the map. Before any
+trader is discovered, the entire trader price section is hidden. Automatically generated common values appear in the
+heading when enabled for every discovered trader; otherwise they are shown only for traders whose personal or
+BepInEx settings enable `Add common valuable items to sell list`.
 
 Discovery uses the client's current location-icon list, including icons shared by the server. It does not require the
 trader to be loaded nearby or the map window to be open. The standard Haldor, Hildir and Bog Witch camp icons are
