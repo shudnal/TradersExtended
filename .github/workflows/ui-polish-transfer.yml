@@ -1,0 +1,45 @@
+name: Temporary trader UI source transfer
+on:
+  push:
+    branches: [fix/trade-focus-stack-dialog-review]
+    paths: ['.github/workflows/ui-polish-transfer.yml']
+permissions:
+  contents: read
+jobs:
+  export:
+    if: github.repository == 'shudnal/TradersExtended'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Export source and reference text without executing it
+        shell: python
+        run: |
+          import json, pathlib, subprocess, urllib.request, zipfile
+          with zipfile.ZipFile('/tmp/trader-ui-source.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+              for path in subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0'):
+                  if path:
+                      archive.write(path, 'repository/' + path)
+              sources = {
+                  'ExtraSlots': ('shudnal/ExtraSlots', 'b3b703a97a44c899e83fc80314373ce45f98a9b0', ['UIDragging.cs', 'EquipmentPanel.cs', 'ExtraSlots.cs']),
+                  'Valheim': ('shudnal/assemblies_combined', 'master', ['assembly_valheim/Minimap.cs', 'assembly_valheim/ZoneSystem.cs', 'assembly_valheim/Trader.cs', 'assembly_valheim/StoreGui.cs', 'assembly_valheim/InventoryGui.cs', 'assembly_valheim/Inventory.cs'])
+              }
+              for label, (repo, ref, files) in sources.items():
+                  if ref == 'master':
+                      request = urllib.request.Request(f'https://api.github.com/repos/{repo}/commits/master', headers={'User-Agent': 'source-inspection'})
+                      with urllib.request.urlopen(request, timeout=30) as response:
+                          ref = json.load(response)['sha']
+                  archive.writestr(f'references/{label}/SOURCE.txt', f'{repo}\n{ref}\n')
+                  for path in files:
+                      with urllib.request.urlopen(f'https://raw.githubusercontent.com/{repo}/{ref}/{path}', timeout=30) as response:
+                          archive.writestr(f'references/{label}/{path}', response.read())
+          print('Exported source only; no build, test or publishing command executed.')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trader-ui-source
+          path: /tmp/trader-ui-source.zip
+          retention-days: 1
+          if-no-files-found: error
