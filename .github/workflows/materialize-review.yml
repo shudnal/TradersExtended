@@ -1,56 +1,43 @@
-name: Materialize reviewed branch changes
+name: Recover staged review sources
 on:
   push:
     branches: [fix/trade-focus-stack-dialog-review]
-    paths: ['.review-import/**', '.github/workflows/materialize-review.yml']
+    paths: ['.github/workflows/materialize-review.yml']
 permissions:
-  contents: write
-concurrency:
-  group: materialize-trade-review
-  cancel-in-progress: false
+  contents: read
 jobs:
-  materialize:
+  recover:
     if: github.repository == 'shudnal/TradersExtended'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
-          ref: fix/trade-focus-stack-dialog-review
-      - name: Verify and apply the reviewed patch
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Export tracked source and decode the archived patch for inspection only
         shell: python
         run: |
-          import base64, gzip, hashlib, pathlib, subprocess
+          import base64, gzip, hashlib, pathlib, subprocess, zipfile
           root = pathlib.Path('.')
           parts = sorted(root.glob('.review-import/part*.txt'))
           if len(parts) != 7:
-              raise RuntimeError('Expected exactly seven reviewed patch parts.')
+              raise RuntimeError('Expected exactly seven archived patch parts.')
           patch = gzip.decompress(base64.b64decode(''.join(p.read_text() for p in parts), validate=True))
-          expected = 'd69a8be3b86df010a94cf020f5b7c23bb40a81f4f11d23cdecd9abe7b8282fbd'
-          if hashlib.sha256(patch).hexdigest() != expected:
-              raise RuntimeError('Reviewed patch checksum mismatch.')
-          parent = subprocess.check_output(['git', 'rev-parse', 'HEAD^'], text=True).strip()
-          if parent != '54e017fe8b40fa3d6feb0a4fc68713a410063bfb':
-              raise RuntimeError('Unexpected baseline; refusing to apply the patch.')
-          subprocess.run(['git', 'apply', '--check', '--unidiff-zero', '--whitespace=error'], input=patch, check=True)
-          subprocess.run(['git', 'apply', '--unidiff-zero', '--whitespace=error'], input=patch, check=True)
-          for part in parts:
-              part.unlink()
-          subprocess.run(['git', 'diff', '--check'], check=True)
-      - name: Commit reviewed source files to the same branch
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A -- . ':!.github/workflows'
-          git commit -m 'Fix trade focus and whole-lot dialogs; harden inventory and editor operations'
-          git push origin HEAD:refs/heads/fix/trade-focus-stack-dialog-review
-          git rev-parse HEAD
-      - uses: actions/setup-dotnet@v4
+          if hashlib.sha256(patch).hexdigest() != 'd69a8be3b86df010a94cf020f5b7c23bb40a81f4f11d23cdecd9abe7b8282fbd':
+              raise RuntimeError('Archived patch checksum mismatch.')
+          paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          with zipfile.ZipFile('review-recovery.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+              for path in paths:
+                  if path:
+                      archive.write(path, 'repository/' + path)
+              archive.writestr('archived-review.patch', patch)
+          print('Archived patch integrity verified; no patch applied and no code executed.')
+          print('Patch bytes:', len(patch))
+          print('Tracked files:', len(paths) - 1)
+      - uses: actions/upload-artifact@v4
         with:
-          dotnet-version: 8.0.x
-      - name: Run production-linked regression tests
-        run: dotnet run --project tests/Regression/Regression.csproj --configuration Release -- "$GITHUB_WORKSPACE"
-      - name: Check repository invariants
-        if: always()
-        run: python3 tests/check_repository.py
+          name: review-recovery
+          path: review-recovery.zip
+          retention-days: 3
+          if-no-files-found: error
