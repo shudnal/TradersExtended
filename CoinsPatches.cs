@@ -1,5 +1,7 @@
-﻿using HarmonyLib;
+using HarmonyLib;
+using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using UnityEngine;
 using static TradersExtended.TradersExtended;
 
@@ -10,38 +12,100 @@ namespace TradersExtended
         public const string itemNameCoins = "Coins";
         public const string itemDropNameCoins = "$item_coins";
 
-        private static readonly List<ItemDrop.ItemData> _itemDataList = new List<ItemDrop.ItemData>();
+        private sealed class OriginalProperties
+        {
+            internal float Weight;
+            internal int MaximumStack;
+            internal float AppliedWeight;
+            internal int AppliedMaximumStack;
+        }
+
+        private static readonly ConditionalWeakTable<ItemDrop.ItemData.SharedData, OriginalProperties> originals =
+            new ConditionalWeakTable<ItemDrop.ItemData.SharedData, OriginalProperties>();
+        private static readonly List<WeakReference<ItemDrop.ItemData.SharedData>> trackedData =
+            new List<WeakReference<ItemDrop.ItemData.SharedData>>();
+
+        private static bool IsCoins(ItemDrop.ItemData item)
+        {
+            if (item?.m_shared == null)
+                return false;
+            if (item.m_dropPrefab != null)
+                return Utils.GetPrefabName(item.m_dropPrefab) == itemNameCoins;
+            GameObject prefab = ObjectDB.instance != null ? ObjectDB.instance.GetItemPrefab(itemNameCoins) : null;
+            return prefab != null && ReferenceEquals(item.m_shared, prefab.GetComponent<ItemDrop>()?.m_itemData.m_shared);
+        }
 
         public static void PatchCoinsItemData(ItemDrop.ItemData coins)
         {
-            if (coins == null)
-                return;
+            if (IsCoins(coins))
+                ApplyProperties(coins.m_shared);
+        }
 
-            if (!coinsPatch.Value)
+        private static void ApplyProperties(ItemDrop.ItemData.SharedData shared)
+        {
+            if (coinsPatch?.Value != true)
+            {
+                RestoreProperties(shared);
                 return;
+            }
+            if (!originals.TryGetValue(shared, out OriginalProperties original))
+            {
+                original = new OriginalProperties { Weight = shared.m_weight, MaximumStack = shared.m_maxStackSize };
+                originals.Add(shared, original);
+                trackedData.Add(new WeakReference<ItemDrop.ItemData.SharedData>(shared));
+            }
+            float weight = coinsWeight.Value;
+            original.AppliedWeight = float.IsNaN(weight) || float.IsInfinity(weight) ? original.Weight : Math.Max(weight, 0f);
+            original.AppliedMaximumStack = Math.Max(coinsStackSize.Value, 1);
+            shared.m_weight = original.AppliedWeight;
+            shared.m_maxStackSize = original.AppliedMaximumStack;
+        }
 
-            coins.m_shared.m_weight = coinsWeight.Value;
-            coins.m_shared.m_maxStackSize = System.Math.Max(coinsStackSize.Value, 1);
+        private static void RestoreProperties(ItemDrop.ItemData.SharedData shared)
+        {
+            if (!originals.TryGetValue(shared, out OriginalProperties original))
+                return;
+            if (shared.m_weight == original.AppliedWeight)
+                shared.m_weight = original.Weight;
+            if (shared.m_maxStackSize == original.AppliedMaximumStack)
+                shared.m_maxStackSize = original.MaximumStack;
+            originals.Remove(shared);
+        }
+
+        internal static void RestoreAll()
+        {
+            foreach (WeakReference<ItemDrop.ItemData.SharedData> reference in trackedData)
+                if (reference.TryGetTarget(out ItemDrop.ItemData.SharedData shared))
+                    RestoreProperties(shared);
+            trackedData.Clear();
+            Player.m_localPlayer?.GetInventory()?.UpdateTotalWeight();
         }
 
         public static void PatchCoinsInInventory(Inventory inventory)
         {
             if (inventory == null)
                 return;
-
-            _itemDataList.Clear();
-            inventory.GetAllItems(itemDropNameCoins, _itemDataList);
-
-            foreach (ItemDrop.ItemData item in _itemDataList)
+            foreach (ItemDrop.ItemData item in inventory.GetAllItems())
                 PatchCoinsItemData(item);
+            inventory.UpdateTotalWeight();
         }
 
         public static void UpdateCoinsPrefab()
         {
-            GameObject prefabCoins = ObjectDB.instance.GetItemPrefab(itemNameCoins);
+            for (int index = trackedData.Count - 1; index >= 0; index--)
+            {
+                if (!trackedData[index].TryGetTarget(out ItemDrop.ItemData.SharedData shared))
+                {
+                    trackedData.RemoveAt(index);
+                    continue;
+                }
+                ApplyProperties(shared);
+                if (!originals.TryGetValue(shared, out _))
+                    trackedData.RemoveAt(index);
+            }
+            GameObject prefabCoins = ObjectDB.instance != null ? ObjectDB.instance.GetItemPrefab(itemNameCoins) : null;
             if (prefabCoins != null)
                 PatchCoinsItemData(prefabCoins.GetComponent<ItemDrop>()?.m_itemData);
-
             PatchCoinsInInventory(Player.m_localPlayer?.GetInventory());
         }
 
@@ -70,7 +134,7 @@ namespace TradersExtended
         {
             private static void Postfix(ref ItemDrop.ItemData item)
             {
-                if (item == null || item.m_shared.m_name != itemDropNameCoins)
+                if (!IsCoins(item))
                     return;
 
                 PatchCoinsItemData(item);
@@ -99,12 +163,12 @@ namespace TradersExtended
         }
 
         [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), typeof(ItemDrop.ItemData), typeof(int), typeof(int), typeof(int))]
-        private static class Inventory_AddItem_ItemData_amount_x_y_PatchCircletItemDataOnLoad
+        private static class Inventory_AddItem_ItemData_amount_x_y_PatchCoinsItemDataOnLoad
         {
             [HarmonyPriority(Priority.First)]
             private static void Prefix(ItemDrop.ItemData item)
             {
-                if (item == null || item.m_shared.m_name != itemDropNameCoins)
+                if (!IsCoins(item))
                     return;
 
                 PatchCoinsItemData(item);

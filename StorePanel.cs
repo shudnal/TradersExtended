@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using GUIFramework;
 using HarmonyLib;
 using System;
@@ -33,6 +33,9 @@ namespace TradersExtended
             public int quality;
             public int pricePerItem;
             public ItemDrop currency;
+            internal float priceFactor = 1f;
+            internal List<ItemDrop.ItemData> sourceItems = new List<ItemDrop.ItemData>();
+            internal List<ItemDrop.ItemData> soldItems;
 
             public ItemToSell Clone()
             {
@@ -81,7 +84,10 @@ namespace TradersExtended
         private static readonly Dictionary<string, Dictionary<int, SellPrice>> tempItemsPrice = new Dictionary<string, Dictionary<int, SellPrice>>();
 
         internal static ItemToSell selectedItem;
-        private static int selectedItemIndex = -1;
+        private static bool tradeInProgress;
+        private static bool sellPaneActive;
+        private static int lastSellIndex;
+        private static int requestedBuyLots = 1;
 
         private static ItemToSell buybackItem;
 
@@ -123,8 +129,6 @@ namespace TradersExtended
             if (sellItemList.Count == 0 || index >= sellItemList.Count)
                 index = -1;
 
-            center = center || index == 0;
-
             for (int i = 0; i < sellItemList.Count; i++)
                 sellItemList[i]?.transform.Find("selected")?.gameObject.SetActive(i == index);
 
@@ -135,115 +139,206 @@ namespace TradersExtended
 
             if (index >= 0)
             {
+                sellPaneActive = true;
+                lastSellIndex = index;
                 AmountDialog.SetSellState(sellDialog: true);
                 StoreGui.instance.SelectItem(-1, center: false);
             }
         }
 
+        internal static int GetSellLotSize(ItemToSell offer)
+        {
+            return offer.itemType == ItemToSell.ItemType.Stack ? offer.stack :
+                offer.itemType == ItemToSell.ItemType.Single ? offer.item.m_stack : 1;
+        }
+
+        private static IEnumerable<ItemDrop.ItemData> GetSellSources(ItemToSell offer, StoreGui store)
+        {
+            Inventory inventory = Player.m_localPlayer.GetInventory();
+            return offer.sourceItems.Where(item => inventory.ContainsItem(item) &&
+                item.m_quality == offer.quality && item.m_worldLevel >= Game.m_worldLevel &&
+                !IgnoreItemForSell(item, store.m_trader));
+        }
+
+        internal static bool TryGetSellQuote(ItemToSell offer, int lots, out int amount, out int price)
+        {
+            amount = price = 0;
+            return offer?.item != null && TradeAmounts.TryGetItemCount(GetSellLotSize(offer), lots, out amount) &&
+                TradeAmounts.TryGetPrice(offer.pricePerItem, lots, offer.priceFactor, out price);
+        }
+
+        internal static int GetMaximumSellLots(StoreGui store, ItemToSell offer)
+        {
+            if (store?.m_trader == null || offer?.item == null || Player.m_localPlayer == null)
+                return 0;
+            int available = TradeAmounts.ClampBalance(GetSellSources(offer, store).Sum(item => (long)item.m_stack));
+            int budget = TraderConfigManager.Get(store.m_trader).TradersUseCoins ? TraderCoins.GetTraderCoins() : int.MaxValue;
+            return TradeAmounts.MaximumSellLots(GetSellLotSize(offer), offer.pricePerItem, available, offer.priceFactor, budget);
+        }
+
+        internal static int GetMaximumBuyLots(StoreGui store, Trader.TradeItem offer)
+        {
+            if (store?.m_trader == null || offer?.m_prefab == null || Player.m_localPlayer == null || ItemToSell.IsBuyBackItem(offer))
+                return 0;
+            TradeableItem.GetStackQualityFromStack(offer.m_stack, out int lotSize, out int quality);
+            ItemDrop.ItemData item = offer.m_prefab.m_itemData;
+            quality = quality == 0 ? item.m_quality : quality;
+            Inventory inventory = Player.m_localPlayer.GetInventory();
+            return TradeAmounts.MaximumBuyLots(lotSize, offer.m_price,
+                TradeInventory.CountCurrency(inventory, TraderCurrency.GetCurrency(offer, store)),
+                TradeInventory.Capacity(inventory, item, quality, Game.m_worldLevel));
+        }
+
+        // Keep calling the public StoreGui entry point so other mods' purchase prefixes/postfixes still run.
+        internal static void BuyLots(StoreGui store, int lots)
+        {
+            int previous = requestedBuyLots;
+            requestedBuyLots = lots;
+            try { store.BuySelectedItem(); }
+            finally { requestedBuyLots = previous; }
+        }
+
         public static void SellSelectedItem(StoreGui storeGui)
         {
-            if (selectedItem == null || Player.m_localPlayer == null)
+            SellSelectedItem(storeGui, selectedItem?.itemType == ItemToSell.ItemType.Combined ? selectedItem.amount : 1);
+        }
+
+        internal static void SellSelectedItem(StoreGui storeGui, int lots)
+        {
+            ItemToSell offer = selectedItem;
+            if (tradeInProgress || storeGui?.m_trader == null || Player.m_localPlayer == null ||
+                !TryGetSellQuote(offer, lots, out int amount, out int price) || !TraderCoins.CanSell(price))
                 return;
 
-            ItemDrop currency = selectedItem.currency ?? storeGui?.m_coinPrefab;
-            if (currency == null)
-            {
-                logger.LogWarning("No currency prefab is available for the selected sell item");
+            ItemDrop currency = offer.currency ?? storeGui.m_coinPrefab;
+            if (currency == null || TradeInventory.PrefabName(offer.item) == Utils.GetPrefabName(currency.gameObject))
                 return;
-            }
-
-            selectedItemIndex = GetSelectedItemIndex();
-
             Inventory inventory = Player.m_localPlayer.GetInventory();
-            int quality = selectedItem.quality == 0 ? -1 : selectedItem.quality;
-            int amountToRemove = selectedItem.itemType == ItemToSell.ItemType.Stack
-                ? selectedItem.stack
-                : selectedItem.itemType == ItemToSell.ItemType.Combined
-                    ? selectedItem.amount
-                    : selectedItem.item.m_stack;
-            bool canRemove = selectedItem.itemType == ItemToSell.ItemType.Single
-                ? inventory.ContainsItem(selectedItem.item)
-                : inventory.CountItems(selectedItem.item.m_shared.m_name, quality) >= amountToRemove;
-            if (!canRemove)
+            if (!TradeInventory.PlanRemoval(inventory, GetSellSources(offer, storeGui), amount, out List<TradeInventory.Removal> removal))
             {
                 storeGui.FillList();
                 return;
             }
 
-            ItemToSell pendingBuyback = TraderConfigManager.Get(storeGui.m_trader).EnableBuybackForLastItemSold
-                ? selectedItem.Clone()
-                : null;
-            ItemDrop originalCurrency = storeGui.m_coinPrefab;
-            storeGui.m_coinPrefab = currency;
+            ItemToSell receipt = offer.Clone();
+            receipt.amount = receipt.stack = amount;
+            receipt.price = price;
+            receipt.currency = currency;
+            receipt.soldItems = TradeInventory.CopyRemovedItems(removal);
+            List<GameObject> droppedObjects = new List<GameObject>();
+            bool committed = false;
+            tradeInProgress = true;
             try
             {
-                using (TraderCoins.BeginBalanceTransaction(TraderCoins.BalanceOperation.Receive))
+                using (TradeInventory.Snapshot snapshot = new TradeInventory.Snapshot(inventory))
                 {
-                    if (selectedItem.itemType == ItemToSell.ItemType.Single)
+                    if (!TradeInventory.Remove(inventory, removal))
+                        return;
+
+                    int inInventory = Math.Min(price, TradeInventory.Capacity(inventory, currency.m_itemData,
+                        currency.m_itemData.m_quality, Game.m_worldLevel));
+                    if (inInventory > 0 && !TradeInventory.AddPrefab(inventory, currency, inInventory, currency.m_itemData.m_quality))
+                        return;
+
+                    int remaining = price - inInventory;
+                    int maximumStack = Math.Max(currency.m_itemData.m_shared.m_maxStackSize, 1);
+                    if (((long)remaining + maximumStack - 1) / maximumStack > 100)
                     {
-                        if (!inventory.RemoveItem(selectedItem.item))
-                            return;
+                        Player.m_localPlayer.Message(MessageHud.MessageType.Center, "$inventory_full");
+                        return;
                     }
-                    else
+                    while (remaining > 0)
                     {
-                        inventory.RemoveItem(selectedItem.item.m_shared.m_name, amountToRemove, quality);
-                    }
-
-                    if (pendingBuyback != null)
-                    {
-                        buybackItem = pendingBuyback;
-                        BuybackManager.Set(storeGui.m_trader, pendingBuyback);
-                    }
-
-                    int currencyBefore = inventory.CountItems(currency.m_itemData.m_shared.m_name);
-                    if (inventory.AddItem(currency.gameObject.name, selectedItem.price, currency.m_itemData.m_quality, currency.m_itemData.m_variant, 0L, "") == null)
-                    {
-                        int remainingCurrency = selectedItem.price + currencyBefore - inventory.CountItems(currency.m_itemData.m_shared.m_name);
-                        int maximumStackSize = Math.Max(currency.m_itemData.m_shared.m_maxStackSize, 1);
-                        int stackCount = Mathf.CeilToInt((float)remainingCurrency / maximumStackSize);
-
-                        GameObject currencyPrefab = ZNetScene.instance != null ? ZNetScene.instance.GetPrefab(currency.gameObject.name) : null;
-                        if (currencyPrefab == null)
-                            currencyPrefab = currency.gameObject;
-
-                        if (currencyPrefab != null && remainingCurrency > 0)
-                        {
-                            TraderCoins.UpdateTraderCoins(-remainingCurrency);
-                            string currencyName = TraderCurrency.GetCurrencyName(currency);
-                            Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, $"$msg_dropped: {currencyName} x{remainingCurrency}");
-                            while (remainingCurrency > 0)
-                            {
-                                Vector3 offset = UnityEngine.Random.insideUnitSphere * (stackCount == 1 ? 0f : 0.5f);
-                                GameObject droppedObject = UnityEngine.Object.Instantiate(
-                                    currencyPrefab,
-                                    Player.m_localPlayer.transform.position + Player.m_localPlayer.transform.forward * 2f + Vector3.up + offset,
-                                    Quaternion.identity);
-                                ItemDrop droppedCurrency = droppedObject.GetComponent<ItemDrop>();
-                                droppedCurrency.m_itemData.m_stack = Mathf.Min(remainingCurrency, maximumStackSize);
-                                remainingCurrency -= droppedCurrency.m_itemData.m_stack;
-                            }
-                        }
+                        GameObject dropped = UnityEngine.Object.Instantiate(currency.gameObject,
+                            Player.m_localPlayer.transform.position + Player.m_localPlayer.transform.forward * 2f + Vector3.up,
+                            Quaternion.identity);
+                        droppedObjects.Add(dropped);
+                        ItemDrop item = dropped.GetComponent<ItemDrop>();
+                        item.m_itemData.m_stack = Math.Min(remaining, maximumStack);
+                        item.m_itemData.m_worldLevel = Game.m_worldLevel;
+                        item.Save();
+                        remaining -= item.m_itemData.m_stack;
                     }
 
-                    string itemText = amountToRemove <= 1
-                        ? selectedItem.item.m_shared.m_name
-                        : $"{amountToRemove}x{selectedItem.item.m_shared.m_name}";
+                    snapshot.Commit();
+                    committed = true;
+                    TraderCoins.UpdateTraderCoins(-price);
+                    if (TraderConfigManager.Get(storeGui.m_trader).EnableBuybackForLastItemSold)
+                        BuybackManager.Set(storeGui.m_trader, receipt);
 
-                    storeGui.m_sellEffects.Create(storeGui.transform.position, Quaternion.identity);
-                    string soldMessage = Localization.instance.Localize("$msg_sold", itemText, selectedItem.price.ToString());
-                    if (currency.m_itemData.m_shared.m_name != CoinsPatches.itemDropNameCoins)
-                        soldMessage = $"{Localization.instance.Localize(itemText)}: {selectedItem.price} {TraderCurrency.GetCurrencyName(currency)}";
-                    Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, soldMessage, 0, selectedItem.item.GetIcon());
-                    storeGui.m_trader.OnSold();
-                    Gogan.LogEvent("Game", "SoldItem", itemText, 0L);
+                    if (price > inInventory)
+                        Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft,
+                            $"$msg_dropped: {TraderCurrency.GetCurrencyName(currency)} x{price - inInventory}");
                 }
+
+                string itemText = amount <= 1 ? offer.item.m_shared.m_name : $"{amount}x{offer.item.m_shared.m_name}";
+                storeGui.m_sellEffects.Create(storeGui.transform.position, Quaternion.identity);
+                string soldMessage = Localization.instance.Localize("$msg_sold", itemText, price.ToString());
+                if (currency.m_itemData.m_shared.m_name != CoinsPatches.itemDropNameCoins)
+                    soldMessage = $"{Localization.instance.Localize(itemText)}: {price} {TraderCurrency.GetCurrencyName(currency)}";
+                Player.m_localPlayer.Message(MessageHud.MessageType.TopLeft, soldMessage, 0, offer.item.GetIcon());
+                storeGui.m_trader.OnSold();
+                Gogan.LogEvent("Game", "SoldItem", itemText, 0L);
             }
             finally
             {
-                storeGui.m_coinPrefab = originalCurrency;
+                if (!committed)
+                    foreach (GameObject dropped in droppedObjects)
+                        if (dropped != null)
+                        {
+                            if (ZNetScene.instance != null)
+                                ZNetScene.instance.Destroy(dropped);
+                            else
+                                UnityEngine.Object.Destroy(dropped);
+                        }
+                tradeInProgress = false;
+                storeGui.FillList();
             }
+        }
 
-            storeGui.FillList();
+        private static void PurchaseSelectedItem(StoreGui store, int lots)
+        {
+            if (tradeInProgress || store?.m_trader == null || Player.m_localPlayer == null || store.m_selectedItem == null)
+                return;
+            tradeInProgress = true;
+            try
+            {
+                Trader.TradeItem offer = store.m_selectedItem;
+                if (ItemToSell.IsBuyBackItem(offer))
+                {
+                    BuyBackItem(store);
+                    return;
+                }
+                if (GetMaximumBuyLots(store, offer) < lots || offer.m_prefab == null)
+                    return;
+                TradeableItem.GetStackQualityFromStack(offer.m_stack, out int lotSize, out int quality);
+                if (!TradeAmounts.TryGetItemCount(lotSize, lots, out int amount) ||
+                    !TradeAmounts.TryGetPrice(offer.m_price, lots, 1d, out int price))
+                    return;
+                ItemDrop currency = TraderCurrency.GetCurrency(offer, store);
+                Inventory inventory = Player.m_localPlayer.GetInventory();
+                if (!TradeInventory.PlanRemoval(inventory,
+                    inventory.GetAllItems().Where(item => TradeInventory.MatchesCurrency(item, currency)), price, out List<TradeInventory.Removal> payment))
+                    return;
+                quality = quality == 0 ? offer.m_prefab.m_itemData.m_quality : quality;
+                using (TradeInventory.Snapshot snapshot = new TradeInventory.Snapshot(inventory))
+                {
+                    // Remove only pre-existing currency stacks, not a currency item bought in this operation.
+                    if (!TradeInventory.Remove(inventory, payment) || !TradeInventory.AddPrefab(inventory, offer.m_prefab, amount, quality))
+                        return;
+                    snapshot.Commit();
+                }
+                TraderCoins.UpdateTraderCoins(price);
+                store.m_trader.OnBought(offer);
+                store.m_buyEffects.Create(store.transform.position, Quaternion.identity);
+                Player.m_localPlayer.ShowPickupMessage(offer.m_prefab.m_itemData, amount);
+                Gogan.LogEvent("Game", "BoughtItem", offer.m_prefab.name, 0L);
+            }
+            finally
+            {
+                tradeInProgress = false;
+                store.FillList();
+            }
         }
 
         private static void AddItemToSellList(TradeableItem item)
@@ -278,14 +373,14 @@ namespace TradersExtended
             if (itemData.m_shared.m_maxStackSize == 1 && item.stack != 1)
                 return false;
 
-            key = GetPriceKey(itemData, item.quality);
+            key = GetPriceKey(item.prefab, item.quality);
 
             return true;
         }
 
-        private static string GetPriceKey(ItemDrop.ItemData itemData, int quality)
+        private static string GetPriceKey(string prefab, int quality)
         {
-            return quality > 0 ? itemData.m_shared.m_name + "-" + quality : itemData.m_shared.m_name;
+            return prefab + "|" + quality;
         }
 
         private static bool IgnoreItemForSell(ItemDrop.ItemData item, Trader trader)
@@ -311,12 +406,12 @@ namespace TradersExtended
         private static Dictionary<int, SellPrice> GetStackPrices(ItemDrop.ItemData item, out int quality)
         {
             quality = item.m_quality;
-            string key = GetPriceKey(item, quality);
+            string key = GetPriceKey(TradeInventory.PrefabName(item), quality);
             if (tempItemsPrice.ContainsKey(key))
                 return tempItemsPrice[key];
 
             quality = 0;
-            key = GetPriceKey(item, quality);
+            key = GetPriceKey(TradeInventory.PrefabName(item), quality);
             if (tempItemsPrice.ContainsKey(key))
                 return tempItemsPrice[key];
 
@@ -330,14 +425,7 @@ namespace TradersExtended
 
         private static int CalculateSellPrice(int basePrice, int amount, float priceFactor)
         {
-            if (basePrice <= 0 || amount <= 0)
-                return 0;
-
-            double price = basePrice * (double)amount * priceFactor;
-            if (double.IsNaN(price) || price >= int.MaxValue)
-                return int.MaxValue;
-
-            return Math.Max((int)Math.Ceiling(price), 1);
+            return TradeAmounts.TryGetPrice(basePrice, amount, priceFactor, out int price) ? price : int.MaxValue;
         }
 
         private static void AddToSellList(ItemDrop.ItemData item, int itemStack, int itemPrice, float priceFactor, int configuredQuality, ItemToSell.ItemType itemType, ItemDrop currency)
@@ -346,7 +434,10 @@ namespace TradersExtended
             int adjustedItemPrice = itemPrice;
             float configuredQualityMultiplier = TraderConfigManager.Get(StoreGui.instance?.m_trader).QualityMultiplier;
             if (itemType != ItemToSell.ItemType.Stack && configuredQualityMultiplier != 0 && configuredQuality == 0 && item.m_quality > 1)
-                adjustedItemPrice += (int)(configuredQualityMultiplier * adjustedItemPrice * (item.m_quality - 1));
+            {
+                if (!TradeAmounts.TryGetQualityPrice(itemPrice, item.m_quality, configuredQualityMultiplier, out adjustedItemPrice))
+                    return;
+            }
 
             int price = CalculateSellPrice(adjustedItemPrice, itemType == ItemToSell.ItemType.Combined ? itemStack : 1, priceFactor);
 
@@ -358,18 +449,24 @@ namespace TradersExtended
                     stack = itemStack,
                     price = price,
                     quality = effectiveQuality,
-                    currency = currency
+                    currency = currency,
+                    pricePerItem = adjustedItemPrice,
+                    priceFactor = priceFactor,
+                    sourceItems = new List<ItemDrop.ItemData> { item }
                 });
             else if (itemType == ItemToSell.ItemType.Stack)
             {
                 ItemToSell currentStack = tempItems.Find(tmpItem => tmpItem.itemType == itemType &&
                                                                     tmpItem.stack == itemStack &&
-                                                                    tmpItem.item.m_shared.m_name == item.m_shared.m_name &&
+                                                                    TradeInventory.PrefabName(tmpItem.item) == TradeInventory.PrefabName(item) &&
                                                                     tmpItem.quality == effectiveQuality &&
                                                                     tmpItem.price == price &&
                                                                     SameCurrency(tmpItem.currency, currency));
                 if (currentStack != null)
-                    currentStack.amount += item.m_stack;
+                {
+                    currentStack.amount = TradeAmounts.ClampBalance((long)currentStack.amount + item.m_stack);
+                    currentStack.sourceItems.Add(item);
+                }
                 else
                     tempItems.Add(new ItemToSell()
                     {
@@ -379,20 +476,24 @@ namespace TradersExtended
                         price = price,
                         amount = item.m_stack,
                         quality = effectiveQuality,
-                        currency = currency
+                        currency = currency,
+                        pricePerItem = adjustedItemPrice,
+                        priceFactor = priceFactor,
+                        sourceItems = new List<ItemDrop.ItemData> { item }
                     });
             }
             else if (itemType == ItemToSell.ItemType.Combined)
             {
                 ItemToSell currentStack = tempItems.Find(tmpItem => tmpItem.itemType == itemType &&
-                                                                    tmpItem.item.m_shared.m_name == item.m_shared.m_name &&
+                                                                    TradeInventory.PrefabName(tmpItem.item) == TradeInventory.PrefabName(item) &&
                                                                     tmpItem.quality == effectiveQuality &&
                                                                     tmpItem.stack == 1 &&
                                                                     tmpItem.pricePerItem == adjustedItemPrice &&
                                                                     SameCurrency(tmpItem.currency, currency));
                 if (currentStack != null)
                 {
-                    currentStack.amount += itemStack;
+                    currentStack.amount = TradeAmounts.ClampBalance((long)currentStack.amount + itemStack);
+                    currentStack.sourceItems.Add(item);
                     currentStack.price = CalculateSellPrice(currentStack.pricePerItem, currentStack.amount, priceFactor);
                 }
                 else
@@ -406,7 +507,9 @@ namespace TradersExtended
                         amount = itemStack,
                         quality = effectiveQuality,
                         pricePerItem = adjustedItemPrice,
-                        currency = currency
+                        currency = currency,
+                        priceFactor = priceFactor,
+                        sourceItems = new List<ItemDrop.ItemData> { item }
                     });
                 }
             }
@@ -419,11 +522,13 @@ namespace TradersExtended
             if (first == null || second == null)
                 return false;
 
-            return string.Equals(first.m_itemData.m_shared.m_name, second.m_itemData.m_shared.m_name, StringComparison.Ordinal);
+            return string.Equals(Utils.GetPrefabName(first.gameObject), Utils.GetPrefabName(second.gameObject), StringComparison.Ordinal);
         }
 
         public static void FillSellableList(StoreGui __instance)
         {
+            ItemToSell previousSelection = selectedItem;
+            int previousIndex = GetSelectedItemIndex();
             foreach (GameObject item in sellItemList)
                 UnityEngine.Object.Destroy(item);
 
@@ -447,7 +552,7 @@ namespace TradersExtended
 
             foreach (ItemDrop.ItemData item in Player.m_localPlayer.GetInventory().GetAllItemsSortedByName())
             {
-                if (IgnoreItemForSell(item, __instance.m_trader))
+                if (item.m_worldLevel < Game.m_worldLevel || IgnoreItemForSell(item, __instance.m_trader))
                     continue;
 
                 Dictionary<int, SellPrice> stackPrices = GetStackPrices(item, out int quality);
@@ -458,7 +563,7 @@ namespace TradersExtended
                 {
                     SellPrice sellPrice = stackPrices[stack];
                     ItemDrop currency = TraderCurrency.GetCurrency(sellPrice.CurrencyPrefab, __instance);
-                    if (currency == null || string.Equals(item.m_shared.m_name, currency.m_itemData.m_shared.m_name, StringComparison.Ordinal))
+                    if (currency == null || string.Equals(TradeInventory.PrefabName(item), Utils.GetPrefabName(currency.gameObject), StringComparison.Ordinal))
                         continue;
 
                     if (stack == 1)
@@ -525,61 +630,57 @@ namespace TradersExtended
                 sellItemList.Add(element);
             }
 
-            if (selectedItemIndex == -1)
-                selectedItemIndex = GetSelectedItemIndex();
+            if (previousIndex < 0 && sellPaneActive)
+                previousIndex = lastSellIndex;
+            SelectItem(TradeSelection.RestoreIndex(tempItems, previousSelection, previousIndex, SameSellOffer), center: false);
+        }
 
-            SelectItem(Mathf.Min(tempItems.Count - 1, selectedItemIndex), center: false);
+        private static bool SameSellOffer(ItemToSell first, ItemToSell second)
+        {
+            return first != null && second != null && first.itemType == second.itemType &&
+                (first.itemType != ItemToSell.ItemType.Single || ReferenceEquals(first.item, second.item)) &&
+                first.stack == second.stack && first.quality == second.quality &&
+                TradeInventory.PrefabName(first.item) == TradeInventory.PrefabName(second.item) &&
+                SameCurrency(first.currency, second.currency);
+        }
+
+        private static bool SameBuyOffer(Trader.TradeItem first, Trader.TradeItem second)
+        {
+            return first != null && second != null && first.m_prefab == second.m_prefab &&
+                first.m_stack == second.m_stack && first.m_requiredGlobalKey == second.m_requiredGlobalKey &&
+                SameCurrency(TraderCurrency.GetCurrency(first, StoreGui.instance), TraderCurrency.GetCurrency(second, StoreGui.instance));
         }
 
         public static void UpdateSellButton()
         {
-            sellButton.interactable = selectedItem != null && TraderCoins.CanSell(selectedItem.price);
+            int lots = selectedItem?.itemType == ItemToSell.ItemType.Combined ? selectedItem.amount : 1;
+            sellButton.interactable = TryGetSellQuote(selectedItem, lots, out _, out int price) && TraderCoins.CanSell(price);
         }
 
         public static bool BuyBackItem(StoreGui store)
         {
-            if (!ItemToSell.IsBuyBackItem(store.m_selectedItem))
+            if (!ItemToSell.IsBuyBackItem(store.m_selectedItem) || Player.m_localPlayer == null)
                 return false;
-
-            buybackItem = BuybackManager.Get(store.m_trader);
-            if (buybackItem == null)
-            {
-                store.m_selectedItem = null;
-                store.FillList();
+            ItemToSell offer = BuybackManager.Get(store.m_trader);
+            if (offer == null || offer.price <= 0 || offer.currency == null)
                 return false;
-            }
-
             Inventory inventory = Player.m_localPlayer.GetInventory();
-            bool result;
-            if (buybackItem.itemType == ItemToSell.ItemType.Single)
+            if (!TradeInventory.PlanRemoval(inventory,
+                inventory.GetAllItems().Where(item => TradeInventory.MatchesCurrency(item, offer.currency)), offer.price,
+                out List<TradeInventory.Removal> payment))
+                return false;
+            using (TradeInventory.Snapshot snapshot = new TradeInventory.Snapshot(inventory))
             {
-                if (!inventory.CanAddItem(buybackItem.item, buybackItem.item.m_stack))
+                if (!TradeInventory.Remove(inventory, payment) || !TradeInventory.AddSavedItems(inventory, offer.soldItems))
                     return false;
-
-                result = inventory.AddItem(buybackItem.item);
+                snapshot.Commit();
             }
-            else
-            {
-                int variant = buybackItem.item.m_variant;
-                int quality = buybackItem.quality == 0 ? buybackItem.item.m_quality : buybackItem.quality;
-                int stack = buybackItem.itemType == ItemToSell.ItemType.Stack ? buybackItem.stack : buybackItem.amount;
-                if (buybackItem.item.m_dropPrefab == null || !inventory.CanAddItem(buybackItem.item, stack))
-                    return false;
-
-                result = inventory.AddItem(buybackItem.item.m_dropPrefab.name, stack, quality, variant, buybackItem.item.m_crafterID, buybackItem.item.m_crafterName, buybackItem.item.m_pickedUp) != null;
-            }
-                
-            if (result)
-            {
-                buybackItem = null;
-                BuybackManager.Remove(store.m_trader);
-                Player.m_localPlayer.GetInventory().RemoveItem(StoreGui.instance.m_coinPrefab.m_itemData.m_shared.m_name, store.m_selectedItem.m_price);
-                store.m_selectedItem = null;
-                StoreGui.instance.m_buyEffects.Create(StoreGui.instance.transform.position, Quaternion.identity);
-                StoreGui.instance.FillList();
-            }
-
-            return result;
+            TraderCoins.UpdateTraderCoins(offer.price);
+            BuybackManager.Remove(store.m_trader);
+            buybackItem = null;
+            store.m_selectedItem = null;
+            store.m_buyEffects.Create(store.transform.position, Quaternion.identity);
+            return true;
         }
 
         internal static void UpdateCurrencyVisuals(StoreGui storeGui)
@@ -764,7 +865,9 @@ namespace TradersExtended
 
                 // Set handler to sell button
                 sellButton = sellPanelTransform.GetComponent<Button>();
-                sellButton.onClick.SetPersistentListenerState(0, UnityEngine.Events.UnityEventCallState.Off);
+                for (int index = 0; index < sellButton.onClick.GetPersistentEventCount(); index++)
+                    sellButton.onClick.SetPersistentListenerState(index, UnityEngine.Events.UnityEventCallState.Off);
+                sellButton.onClick.RemoveAllListeners();
                 sellButton.onClick.AddListener(delegate
                 {
                     __instance.OnSellItem();
@@ -958,7 +1061,7 @@ namespace TradersExtended
                 {
                     Trader.TradeItem tradeItem = result[i];
 
-                    if (tradeItem == null || !ItemIsValid(tradeItem.m_prefab))
+                    if (tradeItem == null || tradeItem.m_price <= 0 || tradeItem.m_stack <= 0 || !ItemIsValid(tradeItem.m_prefab))
                     {
                         result.RemoveAt(i);
                         continue;
@@ -979,8 +1082,12 @@ namespace TradersExtended
                     {
                         tradeItem = CloneTradeItem(tradeItem);
 
-                        tradeItem.m_price = Math.Max((int)(tradeItem.m_price * factor), 1);
-                        TradeableItem.NormalizeStack(tradeItem);
+                        if (!TradeAmounts.TryGetPrice(tradeItem.m_price, 1, factor, out int price, roundUp: false))
+                        {
+                            result.RemoveAt(i);
+                            continue;
+                        }
+                        tradeItem.m_price = price;
 
                         result[i] = tradeItem;
                     }
@@ -1036,6 +1143,15 @@ namespace TradersExtended
         {
             private static void Prefix(StoreGui __instance, Trader trader)
             {
+                if (__instance.m_trader != trader || !StoreGui.IsVisible())
+                {
+                    playerFilter.SetTextWithoutNotify("");
+                    traderFilter.SetTextWithoutNotify("");
+                    selectedItem = null;
+                    sellPaneActive = false;
+                    lastSellIndex = 0;
+                    __instance.m_selectedItem = null;
+                }
                 TraderCoins.ResetCurrentTrader(trader);
                 TraderCurrency.ApplyTraderCurrency(__instance, trader);
                 buybackItem = BuybackManager.Get(trader);
@@ -1049,9 +1165,6 @@ namespace TradersExtended
                 TraderCoins.UpdateTraderCoinsVisibility();
 
                 UpdateNames();
-
-                playerFilter.SetTextWithoutNotify("");
-                traderFilter.SetTextWithoutNotify("");
 
                 SetStoreGuiPosition();
             }
@@ -1224,35 +1337,41 @@ namespace TradersExtended
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.SelectItem))]
         public static class StoreGui_SelectItem_FixOutOfRangeForEmptyList
         {
-            private static void Prefix(StoreGui __instance, ref int index, ref bool center)
+            private static bool Prefix(StoreGui __instance, int index, bool center)
             {
+                List<Trader.TradeItem> offers = StoreGui_FillList_FillSellableList.availableItems;
+                if (index < 0 || offers.Count == 0 || __instance.m_itemList.Count == 0)
+                    index = -1;
+                else
+                    index = Math.Min(index, Math.Min(offers.Count, __instance.m_itemList.Count) - 1);
+                for (int i = 0; i < __instance.m_itemList.Count; i++)
+                    __instance.m_itemList[i]?.transform.Find("selected")?.gameObject.SetActive(i == index);
+                __instance.m_selectedItem = index < 0 ? null : offers[index];
+                if (center && index >= 0)
+                    __instance.m_itemEnsureVisible.CenterOnItem(__instance.m_itemList[index].transform as RectTransform);
                 if (index >= 0)
                 {
-                    if (__instance.m_itemList.Count == 0)
-                        index = -1;
-                    else
-                        index = Mathf.Clamp(index, 0, __instance.m_itemList.Count - 1);
-                }
-
-                center = center || index == 0;
-
-                if (index >= 0)
-                {
+                    sellPaneActive = false;
                     AmountDialog.SetSellState(sellDialog: false);
                     SelectItem(-1, center: false);
                 }
+                return false;
             }
         }
 
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.FillList))]
         public static class StoreGui_FillList_FillSellableList
         {
-            private static readonly List<Trader.TradeItem> availableItems = new List<Trader.TradeItem>();
+            internal static readonly List<Trader.TradeItem> availableItems = new List<Trader.TradeItem>();
 
             public static bool Prefix(StoreGui __instance)
             {
+                if (__instance.m_trader == null || Player.m_localPlayer == null)
+                    return false;
+                bool keepSellFocus = sellPaneActive;
+                Trader.TradeItem previousBuySelection = __instance.m_selectedItem;
+                int num = previousBuySelection == null ? -1 : __instance.GetSelectedItemIndex();
                 TraderCurrency.ApplyTraderCurrency(__instance);
-                int num = __instance.GetSelectedItemIndex();
                 
                 availableItems.Clear();
                 availableItems.AddRange(__instance.m_trader.GetAvailableItems());
@@ -1345,7 +1464,11 @@ namespace TradersExtended
 
                 FillSellableList(__instance);
 
-                __instance.SelectItem(Mathf.Clamp(num, 0, __instance.m_itemList.Count - 1), center: false);
+                if (keepSellFocus)
+                    __instance.SelectItem(-1, center: false);
+                else
+                    __instance.SelectItem(previousBuySelection == null ? 0 :
+                        TradeSelection.RestoreIndex(availableItems, previousBuySelection, num, SameBuyOffer), center: false);
 
                 return false;
             }
@@ -1356,111 +1479,48 @@ namespace TradersExtended
         {
             private static bool Prefix(StoreGui __instance, Trader.TradeItem item, ref bool __result)
             {
-                if (item == null || TraderCurrency.UsesStoreCurrency(item, __instance))
-                    return true;
-
-                __result = TraderCurrency.GetPlayerCurrencyAmount(item, __instance) >= item.m_price;
+                __result = item != null && item.m_price > 0 && TraderCurrency.GetPlayerCurrencyAmount(item, __instance) >= item.m_price;
                 return false;
+            }
+        }
+
+        [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.UpdateBuyButton))]
+        private static class StoreGui_UpdateBuyButton_Capacity
+        {
+            private static void Postfix(StoreGui __instance)
+            {
+                Trader.TradeItem item = __instance.m_selectedItem;
+                if (item == null)
+                    return;
+                if (ItemToSell.IsBuyBackItem(item))
+                {
+                    // Preflight the cached receipt. BuyBackItem rechecks persistence and expiry on click.
+                    ItemToSell receipt = buybackItem;
+                    bool affordable = __instance.CanAfford(item);
+                    bool fits = receipt?.soldItems != null && Player.m_localPlayer != null &&
+                        TradeInventory.CanAddSavedItems(Player.m_localPlayer.GetInventory(), receipt.soldItems);
+                    __instance.m_buyButton.interactable = affordable && fits;
+                    __instance.m_buyButton.GetComponent<UITooltip>().m_text = affordable && fits ? string.Empty :
+                        Localization.instance.Localize(affordable ? "$inventory_full" : "$msg_missingrequirement");
+                    return;
+                }
+                bool canAfford = __instance.CanAfford(item);
+                bool canBuy = GetMaximumBuyLots(__instance, item) > 0;
+                __instance.m_buyButton.interactable = canBuy;
+                __instance.m_buyButton.GetComponent<UITooltip>().m_text = canBuy ? string.Empty :
+                    Localization.instance.Localize(canAfford ? "$inventory_full" : "$msg_missingrequirement");
             }
         }
 
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.BuySelectedItem))]
         public static class StoreGui_BuySelectedItem_TraderCoinsUpdate
         {
-            private sealed class PurchaseState
-            {
-                internal ItemDrop OriginalCurrency;
-                internal Trader.TradeItem TradeItem;
-                internal int OriginalStack;
-                internal int OriginalQuality;
-                internal IDisposable BalanceTransaction;
-            }
-
-            public static bool isCalled;
-
             [HarmonyPriority(Priority.First)]
-            private static bool Prefix(StoreGui __instance, ref PurchaseState __state)
+            private static bool Prefix(StoreGui __instance)
             {
-                isCalled = true;
-                Trader.TradeItem selectedItem = __instance.m_selectedItem;
-                if (selectedItem == null)
-                    return true;
-
-                __state = new PurchaseState
-                {
-                    OriginalCurrency = __instance.m_coinPrefab,
-                    TradeItem = selectedItem,
-                    OriginalStack = selectedItem.m_stack,
-                    OriginalQuality = selectedItem.m_prefab != null ? selectedItem.m_prefab.m_itemData.m_quality : 0,
-                    BalanceTransaction = TraderCoins.BeginBalanceTransaction(TraderCoins.BalanceOperation.Spend)
-                };
-
-                ItemDrop currency = TraderCurrency.GetCurrency(selectedItem, __instance);
-                if (currency != null)
-                    __instance.m_coinPrefab = currency;
-
-                if (!__instance.CanAfford(selectedItem))
-                    return true;
-
-                if (ItemToSell.IsBuyBackItem(selectedItem))
-                {
-                    BuyBackItem(__instance);
-                    return false;
-                }
-
-                if (selectedItem.m_prefab != null)
-                {
-                    TradeableItem.GetStackQualityFromStack(selectedItem.m_stack, out int stack, out int quality);
-                    if (quality != 0)
-                    {
-                        selectedItem.m_stack = stack;
-                        selectedItem.m_prefab.m_itemData.m_quality = quality;
-                    }
-                }
-
-                return true;
-            }
-
-            private static void Restore(StoreGui storeGui, PurchaseState state)
-            {
-                isCalled = false;
-                if (state == null)
-                    return;
-
-                state.BalanceTransaction?.Dispose();
-                state.BalanceTransaction = null;
-
-                if (storeGui != null && state.OriginalCurrency != null)
-                    storeGui.m_coinPrefab = state.OriginalCurrency;
-
-                if (state.TradeItem != null)
-                {
-                    state.TradeItem.m_stack = state.OriginalStack;
-                    if (state.TradeItem.m_prefab != null)
-                        state.TradeItem.m_prefab.m_itemData.m_quality = state.OriginalQuality;
-                }
-            }
-
-            [HarmonyPriority(Priority.First)]
-            private static void Postfix(StoreGui __instance, PurchaseState __state)
-            {
-                Restore(__instance, __state);
-            }
-
-            private static Exception Finalizer(StoreGui __instance, PurchaseState __state, Exception __exception)
-            {
-                Restore(__instance, __state);
-                return __exception;
-            }
-        }
-
-        [HarmonyPatch(typeof(Character), nameof(Character.ShowPickupMessage))]
-        public static class Character_ShowPickupMessage_FixIncorrectStackMessage
-        {
-            private static void Prefix(ItemDrop.ItemData item, ref int amount)
-            {
-                if (StoreGui.instance != null && StoreGui_BuySelectedItem_TraderCoinsUpdate.isCalled && StoreGui.instance.m_selectedItem != null && item == StoreGui.instance.m_selectedItem.m_prefab?.m_itemData)
-                    amount = StoreGui.instance.m_selectedItem.m_stack;
+                if (!AmountDialog.IsOpen())
+                    PurchaseSelectedItem(__instance, requestedBuyLots);
+                return false;
             }
         }
     }

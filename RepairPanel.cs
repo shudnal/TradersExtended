@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using static ItemDrop;
 using UnityEngine;
 using UnityEngine.UI;
@@ -22,7 +23,9 @@ namespace TradersExtended
             repairPanel.transform.localPosition = new Vector3(592, -603, 0);
 
             repairButton = repairPanel.transform.Find("SellButton").GetComponent<Button>();
-            repairButton.onClick.SetPersistentListenerState(0, UnityEngine.Events.UnityEventCallState.Off);
+            for (int index = 0; index < repairButton.onClick.GetPersistentEventCount(); index++)
+                repairButton.onClick.SetPersistentListenerState(index, UnityEngine.Events.UnityEventCallState.Off);
+            repairButton.onClick.RemoveAllListeners();
             repairButton.onClick.AddListener(delegate
             {
                 OnRepairPressed(storeGui);
@@ -75,7 +78,7 @@ namespace TradersExtended
 
         public static void RepairOneItem(StoreGui storeGui)
         {
-            if (Player.m_localPlayer == null)
+            if (Player.m_localPlayer == null || storeGui?.m_trader == null)
                 return;
 
             ItemData item = GetItemToRepair(storeGui);
@@ -85,7 +88,7 @@ namespace TradersExtended
             ItemDrop repairCurrency = TraderCurrency.GetCurrency(config.RepairCurrencyPrefab, storeGui);
             int availableCurrency = repairCurrency == null
                 ? 0
-                : Player.m_localPlayer.GetInventory().CountItems(repairCurrency.m_itemData.m_shared.m_name);
+                : TradeInventory.CountCurrency(Player.m_localPlayer.GetInventory(), repairCurrency);
 
             if (item == null)
                 Player.m_localPlayer.Message(MessageHud.MessageType.Center, Player.m_localPlayer.GetPlayerName() + " $msg_doesnotneedrepair");
@@ -96,13 +99,22 @@ namespace TradersExtended
             }
             else
             {
-                item.m_durability = item.GetMaxDurability();
-
                 if (repairCost != 0)
                 {
-                    Player.m_localPlayer.GetInventory().RemoveItem(repairCurrency.m_itemData.m_shared.m_name, repairCost);
+                    Inventory inventory = Player.m_localPlayer.GetInventory();
+                    if (!TradeInventory.PlanRemoval(inventory,
+                        inventory.GetAllItems().Where(candidate => TradeInventory.MatchesCurrency(candidate, repairCurrency)),
+                        repairCost, out List<TradeInventory.Removal> payment))
+                        return;
+                    using (TradeInventory.Snapshot snapshot = new TradeInventory.Snapshot(inventory))
+                    {
+                        if (!TradeInventory.Remove(inventory, payment))
+                            return;
+                        snapshot.Commit();
+                    }
                     TraderCoins.UpdateTraderCoins(repairCost);
                 }
+                item.m_durability = item.GetMaxDurability();
 
                 repairItemDoneEffects?.Create(Player.m_localPlayer.transform.position, Quaternion.identity);
 

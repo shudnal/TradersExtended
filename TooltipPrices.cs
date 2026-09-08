@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -21,11 +21,11 @@ namespace TradersExtended
             internal TradeableItem Source;
         }
 
-        private static readonly Dictionary<string, List<PriceInfo>> pricesByItemName = new Dictionary<string, List<PriceInfo>>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, List<PriceInfo>> pricesByPrefab = new Dictionary<string, List<PriceInfo>>(StringComparer.Ordinal);
 
         internal static void Rebuild()
         {
-            pricesByItemName.Clear();
+            pricesByPrefab.Clear();
 
             if (ObjectDB.instance == null)
                 return;
@@ -47,11 +47,11 @@ namespace TradersExtended
                     if (itemDrop == null)
                         continue;
 
-                    string itemName = itemDrop.m_itemData.m_shared.m_name;
-                    if (!pricesByItemName.TryGetValue(itemName, out List<PriceInfo> prices))
+                    string itemName = item.prefab;
+                    if (!pricesByPrefab.TryGetValue(itemName, out List<PriceInfo> prices))
                     {
                         prices = new List<PriceInfo>();
-                        pricesByItemName.Add(itemName, prices);
+                        pricesByPrefab.Add(itemName, prices);
                     }
 
                     prices.Add(new PriceInfo
@@ -70,7 +70,11 @@ namespace TradersExtended
 
         private static string GetTooltip(ItemDrop.ItemData itemData, int quality)
         {
-            if (itemData == null || !pricesByItemName.TryGetValue(itemData.m_shared.m_name, out List<PriceInfo> allPrices))
+            string prefabName = TradeInventory.PrefabName(itemData);
+            if (string.IsNullOrEmpty(prefabName) && itemData != null && ObjectDB.instance != null)
+                prefabName = ObjectDB.instance.m_items.FirstOrDefault(prefab => prefab != null &&
+                    prefab.TryGetComponent(out ItemDrop drop) && ReferenceEquals(drop.m_itemData, itemData))?.name;
+            if (string.IsNullOrEmpty(prefabName) || !pricesByPrefab.TryGetValue(prefabName, out List<PriceInfo> allPrices))
                 return string.Empty;
 
             List<PriceInfo> commonExplicitSource = allPrices
