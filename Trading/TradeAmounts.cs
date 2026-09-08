@@ -75,7 +75,7 @@ namespace TradersExtended
             while (low < high)
             {
                 int middle = low + (high - low + 1) / 2;
-                if (TryGetPrice(pricePerLot, middle, factor, out int price) && price <= budget)
+                if (TryGetPrice(pricePerLot, middle, factor, out int price, roundUp: false) && price <= budget)
                     low = middle;
                 else
                     high = middle - 1;

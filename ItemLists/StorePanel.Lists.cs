@@ -106,7 +106,7 @@ namespace TradersExtended
 
         private static int CalculateSellPrice(int basePrice, int amount, float priceFactor)
         {
-            return TradeAmounts.TryGetPrice(basePrice, amount, priceFactor, out int price) ? price : int.MaxValue;
+            return TradeAmounts.TryGetPrice(basePrice, amount, priceFactor, out int price, roundUp: false) ? price : int.MaxValue;
         }
 
         private static void AddToSellList(ItemDrop.ItemData item, int itemStack, int itemPrice, float priceFactor, int configuredQuality, ItemToSell.ItemType itemType, ItemDrop currency)

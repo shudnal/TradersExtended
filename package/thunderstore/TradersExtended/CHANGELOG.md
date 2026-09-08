@@ -3,6 +3,10 @@
 * added whole-stack and multi-stack purchases and sales through the amount dialog
 * improved transaction safety, saved buyback items and configuration reload reliability
 * improved dedicated-server configuration editor access and large-file transfers
+* hidden trader price tooltips until the corresponding trader is discovered on the map
+* amount dialogs now require multiple available trade lots and show the current discount or markup
+* rounded sale prices down consistently in the list, amount preview and payment
+* added key-held dragging for the store and amount panels, with local offsets and an optional reset on store opening
 
 # 2.0.0
 * added an in-game editor for trader settings and item lists, including dedicated-server administration, scalable windows and configurable gameplay input blocking

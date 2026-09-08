@@ -334,16 +334,21 @@ namespace TradersExtended
             if (StoreGui.instance == null || StoreGui.instance.m_rootPanel == null)
                 return;
 
-            if (defaultStorePosition == Vector3.zero)
-                defaultStorePosition = StoreGui.instance.m_rootPanel.transform.localPosition;
+            RectTransform root = StoreGui.instance.m_rootPanel.GetComponent<RectTransform>();
+            if (positionedStoreRoot != root)
+            {
+                positionedStoreRoot = root;
+                defaultStorePosition = root.localPosition;
+                previewStoreOffset = null;
+            }
 
             Vector2 configuredPosition = TraderConfigManager.Get(StoreGui.instance.m_trader).FixedStoreGuiPosition;
-            if (configuredPosition != Vector2.zero)
-                StoreGui.instance.m_rootPanel.transform.localPosition = configuredPosition;
-            else
-                StoreGui.instance.m_rootPanel.transform.localPosition = AdventureModeEnabled(StoreGui.instance.m_trader)
-                                                                        ? defaultStorePosition - new Vector3(RepairPanel.TraderCanRepair(StoreGui.instance.m_trader) ? 146f : 100f, 0f, 0f)
-                                                                        : defaultStorePosition;
+            Vector3 position = configuredPosition != Vector2.zero ? (Vector3)configuredPosition : defaultStorePosition;
+            if (configuredPosition == Vector2.zero && AdventureModeEnabled(StoreGui.instance.m_trader))
+                position.x -= RepairPanel.TraderCanRepair(StoreGui.instance.m_trader) ? 146f : 100f;
+
+            // Local dragging is an offset, so per-trader defaults and EpicLoot positioning still apply.
+            root.localPosition = position + (Vector3)GetStorePanelOffset();
         }
 
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Awake))]
@@ -464,6 +469,8 @@ namespace TradersExtended
                 sellButton.GetComponent<UIGamePad>().m_blockingElements.Add(amountDialog);
                 RepairPanel.AddButtonBlocker(amountDialog);
 
+                ConfigureStorePanelDragging(__instance);
+
                 // Move original tooltip anchor to the side
                 __instance.m_tooltipAnchor.anchorMax += new Vector2(1f, 0f);
 
@@ -489,6 +496,9 @@ namespace TradersExtended
         {
             private static void Prefix(StoreGui __instance, Trader trader)
             {
+                if (__instance.m_trader != trader || !__instance.m_rootPanel.activeSelf)
+                    PreparePanelPositionsForOpen(__instance);
+
                 if (__instance.m_trader != trader || !StoreGui.IsVisible())
                 {
                     playerFilter.SetTextWithoutNotify("");
@@ -530,14 +540,14 @@ namespace TradersExtended
 
             storeName.SetText(traderTopic);
             playerName.SetText(playerTopic);
+        }
 
-            string GetPriceFactorString(float factor, bool reversed = false)
-            {
-                if (factor == 1f)
-                    return "";
+        internal static string GetPriceFactorString(float factor, bool reversed = false)
+        {
+            if (factor == 1f)
+                return string.Empty;
 
-                return $" · <color=#{((reversed && factor < 1) || (!reversed && factor > 1) ? "80ff80fc" : "ff6464fc")}>{(factor - 1f) * 100f:+0;-0}</color>%";
-            }
+            return $" · <color=#{((reversed && factor < 1) || (!reversed && factor > 1) ? "80ff80fc" : "ff6464fc")}>{(factor - 1f) * 100f:+0;-0}</color>%";
         }
 
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.Hide))]

@@ -29,6 +29,9 @@ namespace TradersExtended
         private static string sliderTitleText;
         private static string sliderButtonText;
         private static StoreGui storeGui;
+        private static RectTransform dialogBackground;
+        private static Vector2 defaultDialogPosition;
+        private static Vector2? previewDialogOffset;
 
         private const float m_splitNumInputTimeoutSec = 0.5f;
         private static string m_splitInput = "";
@@ -44,6 +47,9 @@ namespace TradersExtended
             amountDialog.SetActive(false);
 
             Transform win_bkg = amountDialog.transform.Find("win_bkg");
+            dialogBackground = win_bkg.GetComponent<RectTransform>();
+            defaultDialogPosition = dialogBackground.anchoredPosition;
+            previewDialogOffset = null;
 
             sliderTitle = win_bkg.Find("Text").GetComponent<TMP_Text>();
             sliderDialog = win_bkg.Find("Slider").GetComponent<Slider>();
@@ -104,7 +110,35 @@ namespace TradersExtended
             confirm.onClick.AddListener(OnOkClick);
             cancel.onClick.AddListener(Close);
 
+            StorePanel.DragHandle.Configure(StorePanel.DragHandle.CreateBackground(dialogBackground), dialogBackground, IsOpen,
+                GetPanelOffset, PreviewPanelOffset, CommitPanelOffset);
+            StorePanel.DragHandle.Configure(sliderTitle.gameObject, dialogBackground, IsOpen,
+                GetPanelOffset, PreviewPanelOffset, CommitPanelOffset);
+            SetPanelPosition();
+
             return amountDialog;
+        }
+
+        private static Vector2 GetPanelOffset() =>
+            StorePanel.FinitePanelOffset(previewDialogOffset ?? amountDialogOffset.Value);
+
+        private static void PreviewPanelOffset(Vector2 offset)
+        {
+            previewDialogOffset = offset;
+            SetPanelPosition();
+        }
+
+        private static void CommitPanelOffset(Vector2 offset)
+        {
+            previewDialogOffset = null;
+            amountDialogOffset.Value = StorePanel.FinitePanelOffset(offset);
+            SetPanelPosition();
+        }
+
+        internal static void SetPanelPosition()
+        {
+            if (dialogBackground != null && amountDialogOffset != null)
+                dialogBackground.anchoredPosition = defaultDialogPosition + GetPanelOffset();
         }
 
         private static void DisablePersistentListeners(UnityEventBase unityEvent)
@@ -169,7 +203,7 @@ namespace TradersExtended
             }
 
             int maximum = GetMaximumLots();
-            if (maximum < 1)
+            if (maximum < 2)
             {
                 Close();
                 return;
@@ -284,13 +318,18 @@ namespace TradersExtended
                 return;
 
             int maximum = GetMaximumLots();
-            if (maximum < 1)
+            if (maximum < 2)
                 return;
 
             lotSize = isSellDialog ? StorePanel.GetSellLotSize(sellOffer) : TradeableItem.GetStackFromStack(buyOffer.m_stack);
             ItemDrop.ItemData item = isSellDialog ? sellOffer.item : buyOffer.m_prefab.m_itemData;
             ItemDrop currency = isSellDialog ? sellOffer.currency : TraderCurrency.GetCurrency(buyOffer, storeGui);
             sliderTitleText = Localization.instance.Localize(item.m_shared.m_name);
+            ResolvedTraderConfig config = TraderConfigManager.Get(dialogTrader);
+            if (config.TradersUseCoins && config.TradersUseFlexiblePricing)
+                sliderTitleText += StorePanel.GetPriceFactorString(
+                    isSellDialog ? sellOffer.priceFactor : TraderCoins.GetPriceFactor(buyPrice: true), reversed: !isSellDialog);
+            sliderTitle.SetText(sliderTitleText);
             sliderButtonText = Localization.instance.Localize(isSellDialog ? "$store_sell" : "$store_buy");
             sliderDialog.minValue = 1f;
             sliderDialog.maxValue = maximum;
@@ -299,6 +338,7 @@ namespace TradersExtended
             sliderImage.sprite = item.GetIcon();
             UpdateCurrencyIcon(currency ?? storeGui.m_coinPrefab);
             OnSplitSliderChanged();
+            SetPanelPosition();
             amountDialog.SetActive(true);
         }
 

@@ -350,11 +350,27 @@ Double-click a buy or sell row, or use the alternate gamepad action, to open the
 whole trade lots: an offer with `stack: 20` and `price: 10` bought three times delivers 60 items for 30 currency.
 Configured multi-item sell lots work the same way; an incomplete remainder stays in the inventory. Ordinary combined
 sell rows count individual items. The preview shows the delivered item count and the total payment, and limits reflect
-available inventory space, payment currency and trader funds. Flexible sale prices are rounded once for the whole trade.
+available inventory space, payment currency and trader funds. The dialog does not open when fewer than two whole
+lots can be traded; use the regular Buy or Sell button for a single lot. When flexible pricing is enabled, the title
+shows the same colored discount/markup percentage as the corresponding store header. Flexible sale prices are rounded
+down once for the whole trade (with a minimum of one currency), consistently in the list, preview and payout.
 Buyback remains one indivisible receipt rather than a splittable offer.
 
 After selling, the sell list remains selected, including when buyback adds a new entry to the buy list. When an offer
 is exhausted, the nearest remaining sell row is selected; an empty sell list does not force selection to the buy pane.
+
+## Moving the store panels
+
+Hold `LeftAlt` and drag a panel background or title with the left mouse button. Both store columns move together;
+the amount dialog can be moved independently. Buttons, list scrolling and the amount slider keep their normal behavior.
+The key can be changed through `Store UI / Drag key` (`None` disables dragging).
+
+Positions are saved locally as `Store panel offset` and `Amount dialog offset` in the `Store UI` section. They are
+not synchronized with the server. The store offset is added to the trader's configured position or its normal
+Epic Loot-compatible position. Set an offset to `0, 0` to restore that panel's default placement.
+
+`Store UI / Reset panel positions on open` is disabled by default. Enabling it clears both offsets whenever a new
+trader dialog is opened. Opening another amount dialog during the same visit does not reset its position.
 
 ## Custom currencies
 
@@ -374,7 +390,15 @@ The amount dialog, affordability checks, list icons, sale payouts, buyback, and 
 
 ## Price tooltips
 
-Items with entries in sell configs receive a `Trader value` section in their normal tooltip. Explicit common values are shown first, followed by trader-specific values. Automatically generated common values are shown as common when enabled for every known trader; otherwise they are shown only for the traders whose personal or BepInEx settings enable `Add common valuable items to sell list`.
+Items with entries in sell configs receive a `Trader value` section in their normal tooltip. Prices are hidden until
+the corresponding trader's static location icon has been revealed on the map. Before any trader is discovered, the
+entire section is hidden. Explicit common values are shown first, followed by discovered trader-specific values.
+Automatically generated common values are shown as common when enabled for every discovered trader; otherwise they
+are shown only for traders whose personal or BepInEx settings enable `Add common valuable items to sell list`.
+
+Discovery uses the client's current location-icon list, including icons shared by the server. It does not require the
+trader to be loaded nearby or the map window to be open. The standard Haldor, Hildir and Bog Witch camp icons are
+recognized; a custom trader is recognized by a static location icon named after its trader prefab or `<trader>_camp`.
 
 A trader-specific value is not repeated when its applicable price, stack, and effective currency duplicate an explicit common value. Requirement-gated prices are shown only while their global-key and player-key requirements are met.
 

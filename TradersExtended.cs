@@ -96,6 +96,10 @@ namespace TradersExtended
         public static ConfigEntry<bool> hideEquippedAndHotbarItems;
         public static ConfigEntry<bool> addCommonValuableItemsToSellList;
         public static ConfigEntry<Vector2> fixedStoreGuiPosition;
+        internal static ConfigEntry<KeyboardShortcut> storePanelDragKey;
+        internal static ConfigEntry<Vector2> storePanelOffset;
+        internal static ConfigEntry<Vector2> amountDialogOffset;
+        internal static ConfigEntry<bool> resetPanelPositionsOnOpen;
 
         public static ConfigEntry<bool> enableBuyBack;
         public static ConfigEntry<int> buybackLifetime;
@@ -226,6 +230,18 @@ namespace TradersExtended
             configEditorVisibleItemColumns = config("Configuration editor", "Visible item columns", DefaultEditorVisibleItemColumns, "Comma-separated item editor columns to display: Prefab, Name, Stack, Price, Quality, Currency, RequiredGlobalKey, BlockedGlobalKey, RequiredPlayerKey and BlockedPlayerKey. [Not synchronized with server]", false);
             configEditorGlobalKeys = config("Configuration editor", "Global keys", DefaultEditorGlobalKeys, "Comma-separated global keys available in the configuration editor. Custom keys can be added or removed in the picker; built-in keys remain protected. [Not synchronized with server]", false);
             configEditorPlayerKeys = config("Configuration editor", "Player keys", DefaultEditorPlayerKeys, "Comma-separated player keys available in the configuration editor. Custom keys can be added or removed in the picker; built-in keys remain protected. [Not synchronized with server]", false);
+
+            // Panel placement belongs to the local user, never to server configuration policy.
+            storePanelDragKey = Config.Bind("Store UI", "Drag key", new KeyboardShortcut(KeyCode.LeftAlt),
+                "Hold this key and drag a panel background or title with the left mouse button. [Not synchronized with server]");
+            storePanelOffset = Config.Bind("Store UI", "Store panel offset", Vector2.zero,
+                "Local store panel offset from its configured default position. Updated on drag release. [Not synchronized with server]");
+            amountDialogOffset = Config.Bind("Store UI", "Amount dialog offset", Vector2.zero,
+                "Local amount dialog offset from its default position. Updated on drag release. [Not synchronized with server]");
+            resetPanelPositionsOnOpen = Config.Bind("Store UI", "Reset panel positions on open", false,
+                "Reset both panel offsets whenever a new trader dialog is opened. [Not synchronized with server]");
+            storePanelOffset.SettingChanged += delegate { StorePanel.SetStoreGuiPosition(); };
+            amountDialogOffset.SettingChanged += delegate { AmountDialog.SetPanelPosition(); };
 
             checkForDiscovery = config("Item discovery", "Sell only discovered items", true, "A trader will not sell items that the buyer has not discovered.");
             checkForDiscoveryIgnoreItems = config("Item discovery", "Undiscovered items list to sell", "", "Comma-separated prefab names that bypass the discovery check. Vanilla trader items are included by default.");

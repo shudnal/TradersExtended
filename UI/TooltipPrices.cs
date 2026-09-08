@@ -90,6 +90,9 @@ namespace TradersExtended
 
             HashSet<string> traderNames = new HashSet<string>(TraderConfigManager.GetKnownTraderNames(), StringComparer.OrdinalIgnoreCase);
             traderNames.UnionWith(specificPrices.Keys);
+            KeepDiscoveredTraders(traderNames);
+            if (traderNames.Count == 0)
+                return string.Empty;
 
             bool automaticIsCommon = traderNames.Count > 0 &&
                                      traderNames.All(name => TraderConfigManager.Get(name).AddCommonValuableItemsToSellList);
@@ -127,6 +130,33 @@ namespace TradersExtended
             }
 
             return hasPrices ? result.ToString() : string.Empty;
+        }
+
+        private static void KeepDiscoveredTraders(HashSet<string> traderNames)
+        {
+            if (Player.m_localPlayer == null || ZoneSystem.instance == null || ZNet.instance == null)
+            {
+                traderNames.Clear();
+                return;
+            }
+
+            // This is the live icon list consumed by Minimap, not the catalogue of possible icons.
+            // GetLocationIcons uses the received icons on clients and the same visible set on hosts.
+            Dictionary<Vector3, string> icons = new Dictionary<Vector3, string>();
+            ZoneSystem.instance.GetLocationIcons(icons);
+            HashSet<string> locations = new HashSet<string>(icons.Values, StringComparer.OrdinalIgnoreCase);
+            traderNames.RemoveWhere(name => !HasTraderLocationIcon(TraderName(name), locations));
+        }
+
+        private static bool HasTraderLocationIcon(string trader, HashSet<string> locations)
+        {
+            switch (trader)
+            {
+                case "haldor": return locations.Contains("Vendor_BlackForest");
+                case "hildir": return locations.Contains("Hildir_camp");
+                case "bogwitch": return locations.Contains("BogWitch_Camp");
+                default: return locations.Contains(trader) || locations.Contains(trader + "_camp");
+            }
         }
 
         private static bool SamePrice(PriceInfo left, PriceInfo right, string trader)

@@ -78,7 +78,7 @@ namespace TradersExtended
         {
             amount = price = 0;
             return offer?.item != null && TradeAmounts.TryGetItemCount(GetSellLotSize(offer), lots, out amount) &&
-                TradeAmounts.TryGetPrice(offer.pricePerItem, lots, offer.priceFactor, out price);
+                TradeAmounts.TryGetPrice(offer.pricePerItem, lots, offer.priceFactor, out price, roundUp: false);
         }
 
         internal static int GetMaximumSellLots(StoreGui store, ItemToSell offer)

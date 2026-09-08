@@ -135,6 +135,7 @@
     <Compile Include="UI\AmountDialog.cs" />
     <Compile Include="UI\RepairPanel.cs" />
     <Compile Include="UI\StorePanel.cs" />
+    <Compile Include="UI\StorePanel.Dragging.cs" />
     <Compile Include="UI\TooltipPrices.cs" />
   </ItemGroup>
   <ItemGroup>
