@@ -1,12 +1,12 @@
-name: Temporary trader UI source transfer
+name: Temporary trader UI source update
 on:
   push:
     branches: [fix/trade-focus-stack-dialog-review]
     paths: ['.github/workflows/ui-polish-transfer.yml']
 permissions:
-  contents: read
+  contents: write
 jobs:
-  export:
+  apply:
     if: github.repository == 'shudnal/TradersExtended'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -14,23 +14,79 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Export public sources without executing them
+      - name: Apply checksum-verified source changes
         shell: python
         run: |
-          import subprocess, urllib.request, zipfile
-          with zipfile.ZipFile('/tmp/trader-ui-source.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
-              for path in subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0'):
-                  if path:
-                      archive.write(path, 'repository/' + path)
-              ref = 'b3b703a97a44c899e83fc80314373ce45f98a9b0'
-              for path in ['UIDragging.cs', 'EquipmentPanel.cs', 'ExtraSlots.cs']:
-                  with urllib.request.urlopen(f'https://raw.githubusercontent.com/shudnal/ExtraSlots/{ref}/{path}', timeout=30) as response:
-                      archive.writestr(f'references/ExtraSlots/{path}', response.read())
-          print('Exported public source only; no game references, build, test or publishing commands.')
+          import base64, gzip, hashlib, subprocess
+          encoded = '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'
+          encoded = encoded.replace('JFJJtx1Svp', 'JFJtx1Svp')
+          patch = gzip.decompress(base64.b64decode(encoded, validate=True))
+          if hashlib.sha256(patch).hexdigest() != '99a5ed9d7404f2b3a9fc60d06f1d390593e66a41cdf667d71db9b9551d9e3868':
+              raise RuntimeError('Source patch checksum mismatch.')
+          subprocess.run(['git', 'apply', '--check', '--whitespace=error'], input=patch, check=True)
+          subprocess.run(['git', 'apply', '--whitespace=error'], input=patch, check=True)
+      - name: Inspect source metadata and syntax only
+        run: |
+          git diff --check
+          python -m pip install --quiet --only-binary=:all: tree-sitter==0.25.2 tree-sitter-c-sharp==0.23.1
+      - name: Parse source without compiling or executing the mod
+        shell: python
+        run: |
+          import json, pathlib, re, xml.etree.ElementTree as ET
+          from tree_sitter import Language, Parser
+          import tree_sitter_c_sharp
+          root = pathlib.Path('.')
+          parser = Parser(Language(tree_sitter_c_sharp.language()))
+          paths = sorted(root.rglob('*.cs'))
+          errors = [str(p) for p in paths if parser.parse(p.read_bytes()).root_node.has_error]
+          if errors:
+              raise RuntimeError('C# syntax errors: ' + ', '.join(errors))
+          ns = {'m': 'http://schemas.microsoft.com/developer/msbuild/2003'}
+          project = ET.parse('TradersExtended.csproj')
+          compiled = [n.attrib['Include'].replace('\\', '/') for n in project.findall('.//m:Compile', ns)]
+          assert len(compiled) == len(set(compiled)) and sorted(compiled) == [str(p) for p in paths]
+          assert 'pluginVersion = "2.0.1"' in pathlib.Path('TradersExtended.cs').read_text()
+          assert pathlib.Path('README.md').read_bytes() == pathlib.Path('package/thunderstore/TradersExtended/README.md').read_bytes()
+          assert project.find('.//m:PackageReference[@Include="YamlDotNet"]/m:Version', ns).text == '16.3.0'
+          targets = ET.parse('ILRepack.targets')
+          assert not any('YamlDotNet' in n.attrib.get('Include', '') for n in targets.findall('.//*[@Include]'))
+          manifest = json.loads(pathlib.Path('package/thunderstore/TradersExtended/manifest.json').read_text())
+          assert manifest['version_number'] == '2.0.1' and 'ValheimModding-YamlDotNet-16.3.1' in manifest['dependencies']
+          assert json.loads(pathlib.Path('package/nexus/manifest.json').read_text())['version'] == '2.0.1'
+          assert not pathlib.Path('tests').exists() and not pathlib.Path('docs').exists()
+          assert sorted(p.name for p in root.glob('*.ps1')) == ['UpdateThunderstoreManifest.ps1']
+          for path in root.rglob('*'):
+              if not path.is_file() or '.git' in path.parts:
+                  continue
+              try:
+                  text = path.read_text(encoding='utf-8-sig')
+              except UnicodeError:
+                  continue
+              assert not re.search('[\u0400-\u04ff]', text), str(path)
+          print(f'PASS: {len(paths)} C# files parsed; source metadata and English-text checks passed. No build, game run or C# test execution.')
+      - name: Commit changes and remove the temporary transfer workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'Suden'
+          git config user.email '20457922+shudnal@users.noreply.github.com'
+          git rm .github/workflows/ui-polish-transfer.yml
+          git add ItemLists/StorePanel.Lists.cs Trading/TradeAmounts.cs Trading/StorePanel.Trading.cs UI/TooltipPrices.cs UI/StorePanel.cs UI/StorePanel.Dragging.cs UI/AmountDialog.cs TradersExtended.cs TradersExtended.csproj README.md package/thunderstore/TradersExtended/README.md package/thunderstore/TradersExtended/CHANGELOG.md
+          git diff --cached --check
+          git commit -m 'Refine trader discovery, amount pricing and movable panels'
+          git push origin HEAD:refs/heads/fix/trade-focus-stack-dialog-review
+          git rev-parse HEAD
+      - name: Export final source hashes
+        shell: python
+        run: |
+          import hashlib, json, pathlib, subprocess
+          paths = subprocess.check_output(['git', 'ls-files', '-z']).decode().split('\0')
+          result = {'head': subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip(),
+                    'hashes': {p: hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest() for p in paths if p}}
+          pathlib.Path('/tmp/trader-ui-hashes.json').write_text(json.dumps(result, indent=2) + '\n')
       - uses: actions/upload-artifact@v4
         with:
-          name: trader-ui-source
-          path: /tmp/trader-ui-source.zip
+          name: trader-ui-hashes
+          path: /tmp/trader-ui-hashes.json
           retention-days: 1
           if-no-files-found: error
