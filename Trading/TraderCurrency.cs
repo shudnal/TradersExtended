@@ -21,12 +21,17 @@ namespace TradersExtended
         private static readonly ConditionalWeakTable<Trader.TradeItem, CurrencyReference> itemCurrencies = new ConditionalWeakTable<Trader.TradeItem, CurrencyReference>();
         private static readonly HashSet<string> invalidCurrenciesLogged = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        private static ItemDrop vanillaCurrencyPrefab;
+        private static ItemDrop coinPrefab;
 
         internal static void CaptureVanillaCurrency(StoreGui storeGui)
         {
-            if (vanillaCurrencyPrefab == null && storeGui != null && storeGui.m_coinPrefab != null)
-                vanillaCurrencyPrefab = storeGui.m_coinPrefab;
+            if (coinPrefab == null)
+            {
+                if (storeGui != null && storeGui.m_coinPrefab != null && storeGui.m_coinPrefab.name == CoinsPatches.itemNameCoins)
+                    coinPrefab = storeGui.m_coinPrefab;
+                else if (ObjectDB.instance)
+                    coinPrefab = ObjectDB.instance.GetItemPrefab(CoinsPatches.itemNameCoins).GetComponent<ItemDrop>();
+            }
         }
 
         internal static void RebuildOverrides()
@@ -48,10 +53,10 @@ namespace TradersExtended
 
             CaptureVanillaCurrency(storeGui);
 
-            ItemDrop currency = vanillaCurrencyPrefab;
+            ItemDrop currency = GetVanillaCurrency();
             string configuredCurrency = GetTraderCurrencyPrefabName(trader ?? storeGui.m_trader);
             if (!string.IsNullOrEmpty(configuredCurrency))
-                currency = ResolveCurrency(configuredCurrency) ?? vanillaCurrencyPrefab;
+                currency = ResolveCurrency(configuredCurrency) ?? GetVanillaCurrency();
 
             if (currency != null)
                 storeGui.m_coinPrefab = currency;
@@ -108,7 +113,7 @@ namespace TradersExtended
                     return resolved;
             }
 
-            return storeGui != null ? storeGui.m_coinPrefab : vanillaCurrencyPrefab;
+            return storeGui != null ? storeGui.m_coinPrefab : GetVanillaCurrency();
         }
 
         internal static ItemDrop GetCurrency(Trader.TradeItem tradeItem, StoreGui storeGui)
@@ -120,7 +125,7 @@ namespace TradersExtended
                     return resolved;
             }
 
-            return storeGui != null ? storeGui.m_coinPrefab : vanillaCurrencyPrefab;
+            return storeGui != null ? storeGui.m_coinPrefab : GetVanillaCurrency();
         }
 
         internal static int GetPlayerCurrencyAmount(Trader.TradeItem tradeItem, StoreGui storeGui)
@@ -163,14 +168,14 @@ namespace TradersExtended
         {
             string currencyPrefab = GetTraderCurrencyPrefabName(traderName);
             ItemDrop currency = string.IsNullOrEmpty(currencyPrefab)
-                ? vanillaCurrencyPrefab
-                : ResolveCurrency(currencyPrefab) ?? vanillaCurrencyPrefab;
+                ? GetVanillaCurrency()
+                : ResolveCurrency(currencyPrefab) ?? GetVanillaCurrency();
             return GetCurrencyName(currency);
         }
 
         internal static ItemDrop GetVanillaCurrency()
         {
-            return vanillaCurrencyPrefab;
+            return coinPrefab;
         }
 
         private static ItemDrop ResolveCurrency(string prefabName)

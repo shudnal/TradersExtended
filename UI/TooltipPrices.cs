@@ -1,7 +1,9 @@
+using BepInEx;
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Emit;
 using System.Text;
 using UnityEngine;
 using static TradersExtended.TradersExtended;
@@ -103,12 +105,12 @@ namespace TradersExtended
 
             StringBuilder result = new StringBuilder();
             result.Append("\n\n<color=#ffcc66>")
-                .Append(Localization.instance?.Localize("$item_value") ?? "$item_value").Append("</color>:");
+                .Append(Localization.instance?.Localize("$item_value") ?? "$item_value").Append("</color>");
             bool hasPrices = commonPrices.Count > 0;
             if (hasPrices)
             {
-                result.Append(' ');
-                AppendPrices(result, commonPrices, string.Empty);
+                hasPrices = true;
+                AppendPriceLine(result, string.Empty, commonPrices, string.Empty);
             }
 
             foreach (string traderName in traderNames.OrderBy(name => name, StringComparer.OrdinalIgnoreCase))
@@ -201,7 +203,11 @@ namespace TradersExtended
             if (prices == null || prices.Count == 0)
                 return;
 
-            result.Append('\n').Append(label).Append(": ");
+            result.Append('\n');
+
+            if (!string.IsNullOrWhiteSpace(label))
+                result.Append(label).Append(": ");
+
             AppendPrices(result, prices, currency);
         }
 
@@ -221,7 +227,7 @@ namespace TradersExtended
                     if (!string.IsNullOrEmpty(configuredCurrency))
                         effectiveCurrency = configuredCurrency;
                 }
-                if (!string.IsNullOrEmpty(effectiveCurrency))
+                if (!string.IsNullOrEmpty(effectiveCurrency) && effectiveCurrency != CoinsPatches.itemDropNameCoins)
                     result.Append(' ').Append(effectiveCurrency);
                 if (price.Stack > 1)
                     result.Append(" / x").Append(price.Stack);
@@ -240,24 +246,11 @@ namespace TradersExtended
             return localized == "$npc_" + trader ? trader : localized;
         }
 
-        [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.Awake))]
-        private static class ObjectDB_Awake_RebuildTooltipPrices
+        [HarmonyPatch(typeof(ZoneSystem), nameof(ZoneSystem.Start))]
+        private static class ZoneSystem_Awake_RebuildTooltipPrices
         {
             [HarmonyPriority(Priority.Last)]
-            private static void Postfix()
-            {
-                Rebuild();
-            }
-        }
-
-        [HarmonyPatch(typeof(ObjectDB), nameof(ObjectDB.CopyOtherDB))]
-        private static class ObjectDB_CopyOtherDB_RebuildTooltipPrices
-        {
-            [HarmonyPriority(Priority.Last)]
-            private static void Postfix()
-            {
-                Rebuild();
-            }
+            private static void Postfix() => Rebuild();
         }
 
         [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetTooltip), new Type[] { typeof(ItemDrop.ItemData), typeof(int), typeof(bool), typeof(float), typeof(int) })]
