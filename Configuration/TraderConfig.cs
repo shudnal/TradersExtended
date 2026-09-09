@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
@@ -368,6 +368,8 @@ namespace TradersExtended
                 else
                 {
                     value = token.ToObject<T>();
+                    if (value is float number && (float.IsNaN(number) || float.IsInfinity(number)))
+                        throw new FormatException("Expected a finite number.");
                 }
 
                 return true;
@@ -393,7 +395,11 @@ namespace TradersExtended
                 (yToken.Type != JTokenType.Integer && yToken.Type != JTokenType.Float))
                 throw new FormatException("Expected an object with numeric 'x' and 'y' fields.");
 
-            return new Vector2(xToken.Value<float>(), yToken.Value<float>());
+            float x = xToken.Value<float>();
+            float y = yToken.Value<float>();
+            if (float.IsNaN(x) || float.IsInfinity(x) || float.IsNaN(y) || float.IsInfinity(y))
+                throw new FormatException("Expected finite x and y coordinates.");
+            return new Vector2(x, y);
         }
 
         internal static JObject DeserializeTraderConfig(string content, string source)

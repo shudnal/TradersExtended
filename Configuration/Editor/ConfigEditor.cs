@@ -11,7 +11,7 @@ using static TradersExtended.TradersExtended;
 
 namespace TradersExtended
 {
-    internal sealed class ConfigEditor : IDisposable
+    internal sealed partial class ConfigEditor : IDisposable
     {
         private const int WindowId = 924617;
         private const int NewFileWindowId = 924618;
@@ -56,9 +56,11 @@ namespace TradersExtended
             ItemSortColumn.BlockedPlayerKey
         };
 
+        private long targetRevision;
+        private bool targetChanged;
         private readonly ConfigEditorCursor cursor = new ConfigEditorCursor();
-        private readonly ConfigEditorGuiScale scale = new ConfigEditorGuiScale();
-        private readonly ConfigEditorTheme theme = new ConfigEditorTheme();
+        private readonly GuiScale scale = new GuiScale();
+        private readonly Theme theme = new Theme();
         private readonly Dictionary<string, string> traderDisplayNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private readonly List<ItemOption> itemOptions = new List<ItemOption>();
         private readonly Dictionary<string, ItemOption> itemOptionsByPrefab = new Dictionary<string, ItemOption>(StringComparer.OrdinalIgnoreCase);
@@ -203,6 +205,7 @@ namespace TradersExtended
         internal ConfigEditor()
         {
             ConfigEditorTransport.ResponseReceived += OnTransportResponse;
+            ConfigEditorTransport.TransferProgress += OnTransferProgress;
         }
 
         internal static bool IsOpenGlobal => configEditor != null && configEditor.IsOpen;
@@ -218,6 +221,8 @@ namespace TradersExtended
 
         internal void Update()
         {
+            if (isOpen)
+                EnsureTargetContext();
             if (configEditorShortcut != null && configEditorShortcut.Value.IsDown())
             {
                 Toggle();
@@ -247,6 +252,7 @@ namespace TradersExtended
 
             if (requestInProgress && Time.realtimeSinceStartup - requestStartedAt > RequestTimeoutSeconds)
             {
+                ConfigEditorTransport.CancelPendingRequest();
                 requestInProgress = false;
                 selectAfterList = null;
                 SetStatus("The configuration request timed out. Check the server connection and mod version.", true);
@@ -286,6 +292,7 @@ namespace TradersExtended
             Matrix4x4 oldMatrix = GUI.matrix;
             GUISkin oldSkin = GUI.skin;
             Color oldContentColor = GUI.contentColor;
+            bool oldEnabled = GUI.enabled;
             IsDrawing = true;
             try
             {
@@ -298,7 +305,7 @@ namespace TradersExtended
 
                 bool popupOpen = showConfirm || showItemPicker || showGlobalKeyPicker || showNewFile;
                 bool previousEnabled = GUI.enabled;
-                GUI.enabled = !popupOpen;
+                GUI.enabled = previousEnabled && !popupOpen;
                 Rect previousWindowRect = windowRect;
                 windowRect = GUI.Window(WindowId, windowRect, DrawWindow, "Traders Extended configuration editor", windowStyle);
                 GUI.enabled = previousEnabled;
@@ -334,7 +341,7 @@ namespace TradersExtended
                 }
                 lastGuiExceptionSignature = string.Empty;
             }
-            catch (Exception exception)
+            catch (Exception exception) when (exception is not ExitGUIException)
             {
                 string signature = exception.GetType().FullName + ": " + exception.Message;
                 if (!string.Equals(signature, lastGuiExceptionSignature, StringComparison.Ordinal))
@@ -346,6 +353,7 @@ namespace TradersExtended
             }
             finally
             {
+                GUI.enabled = oldEnabled;
                 GUI.contentColor = oldContentColor;
                 GUI.skin = oldSkin;
                 GUI.matrix = oldMatrix;
@@ -357,7 +365,9 @@ namespace TradersExtended
 
         public void Dispose()
         {
+            ConfigEditorTransport.CancelPendingRequest();
             ConfigEditorTransport.ResponseReceived -= OnTransportResponse;
+            ConfigEditorTransport.TransferProgress -= OnTransferProgress;
             cursor.Release();
             theme.Shutdown();
         }
@@ -378,9 +388,13 @@ namespace TradersExtended
 
         private void SetOpenImmediate(bool value)
         {
+            ConfigEditorTransport.CancelPendingRequest();
+            requestInProgress = false;
             isOpen = value;
             if (value)
             {
+                targetRevision = ConfigEditorTransport.TargetRevision;
+                targetChanged = false;
                 LoadLayout();
                 traderDisplayNames.Clear();
                 RefreshFiles();
@@ -389,6 +403,11 @@ namespace TradersExtended
             else
             {
                 SaveLayout();
+                activeFile = null;
+                itemDocument = null;
+                traderDocument = null;
+                selectAfterList = null;
+                files.Clear();
                 showNewFile = false;
                 showItemPicker = false;
                 showGlobalKeyPicker = false;
@@ -514,29 +533,31 @@ namespace TradersExtended
 
         private void DrawFileActions()
         {
-            GUI.enabled = !requestInProgress;
+            bool inheritedEnabled = GUI.enabled;
+            GUI.enabled = inheritedEnabled && (!requestInProgress);
             if (GUILayout.Button("Refresh", smallButtonStyle, GUILayout.Width(62f), GUILayout.Height(CompactControlHeight)))
                 RefreshFiles();
             if (GUILayout.Button("New", smallButtonStyle, GUILayout.Width(42f), GUILayout.Height(CompactControlHeight)))
                 OpenNewFileWindow();
-            GUI.enabled = activeFile != null && !requestInProgress;
+            GUI.enabled = inheritedEnabled && (activeFile != null && !requestInProgress);
             if (GUILayout.Button("Delete", smallButtonStyle, GUILayout.Width(54f), GUILayout.Height(CompactControlHeight)))
                 DeleteActiveFile();
-            GUI.enabled = true;
+            GUI.enabled = inheritedEnabled;
         }
 
 
         private void DrawEditorActions()
         {
+            bool inheritedEnabled = GUI.enabled;
             bool hasSupportedFile = activeFile != null && activeFile.Kind != EditorConfigKind.Unsupported;
-            bool canApply = hasSupportedFile && IsDirty() && !requestInProgress;
-            GUI.enabled = canApply;
+            bool canApply = hasSupportedFile && IsDirty() && !requestInProgress && !targetChanged;
+            GUI.enabled = inheritedEnabled && (canApply);
             GUIStyle saveStyle = canApply ? theme.AccentButtonStyle : smallButtonStyle;
             if (GUILayout.Button("Save", saveStyle, GUILayout.Width(48f), GUILayout.Height(CompactControlHeight)))
                 SaveActiveFile();
             if (GUILayout.Button("Cancel", smallButtonStyle, GUILayout.Width(56f), GUILayout.Height(CompactControlHeight)))
                 RevertActiveFile();
-            GUI.enabled = true;
+            GUI.enabled = inheritedEnabled;
         }
 
 
@@ -544,7 +565,8 @@ namespace TradersExtended
         {
             GUILayout.BeginVertical(panelStyle, GUILayout.ExpandWidth(true), GUILayout.ExpandHeight(true));
             GUIStyle sourceStyle = ConfigEditorTransport.UsesRemoteServer ? serverSourceStyle : singleLineMutedStyle;
-            string sourceText = ConfigEditorTransport.UsesRemoteServer ? "SERVER CONFIGURATION DIRECTORY" : "Local configuration directory";
+            string sourceText = targetChanged ? "PREVIOUS CONFIGURATION TARGET (READ ONLY)" :
+                ConfigEditorTransport.UsesRemoteServer ? "SERVER CONFIGURATION DIRECTORY" : "Local configuration directory";
             GUILayout.Label(sourceText, sourceStyle, GUILayout.ExpandWidth(true), GUILayout.Height(CompactControlHeight));
 
             GUILayout.BeginHorizontal();
@@ -645,13 +667,18 @@ namespace TradersExtended
                 GUILayout.Label("The file name does not match a supported Traders Extended configuration pattern.", errorStyle);
                 GUILayout.FlexibleSpace();
             }
-            else if (itemDocument != null)
+            else if (itemDocument != null || traderDocument != null)
             {
-                DrawItemEditor();
-            }
-            else if (traderDocument != null)
-            {
-                DrawTraderEditor();
+                bool inheritedEnabled = GUI.enabled;
+                GUI.enabled = inheritedEnabled && !requestInProgress && !targetChanged;
+                try
+                {
+                    if (itemDocument != null)
+                        DrawItemEditor();
+                    else
+                        DrawTraderEditor();
+                }
+                finally { GUI.enabled = inheritedEnabled; }
             }
             else
             {
@@ -686,7 +713,7 @@ namespace TradersExtended
             GUILayout.Label(activeTitle, pickerNameStyle, GUILayout.ExpandWidth(false), GUILayout.Height(headerControlHeight));
             GUILayout.FlexibleSpace();
 
-            bool blockInput = ConfigEditorGui.ToggleLayout(
+            bool blockInput = Controls.ToggleLayout(
                 theme,
                 configEditorBlockGameInput?.Value == true,
                 new GUIContent("Prevent input", "Block all Valheim gameplay input while the configuration editor is open."),
@@ -701,6 +728,7 @@ namespace TradersExtended
 
         private void DrawItemEditor()
         {
+            bool inheritedEnabled = GUI.enabled;
             EnsureItemOptions();
             EnsureVisibleItemColumns();
             List<EditorItemRow> filteredRows = itemDocument.Rows.Where(ItemMatchesSearch).ToList();
@@ -735,13 +763,13 @@ namespace TradersExtended
 
             GUILayout.Space(2f);
             int selectedCount = itemDocument.Rows.Count(row => row.Selected);
-            GUI.enabled = selectedCount > 0;
+            GUI.enabled = inheritedEnabled && (selectedCount > 0);
             if (GUILayout.Button($"Delete selected ({selectedCount})", smallButtonStyle, GUILayout.Width(140f), GUILayout.Height(CompactControlHeight)))
             {
                 itemDocument.Rows.RemoveAll(row => row.Selected);
                 itemDocument.Dirty = true;
             }
-            GUI.enabled = true;
+            GUI.enabled = inheritedEnabled;
 
             GUILayout.Space(10f);
             GUILayout.Label("Search", GUILayout.Width(50f), GUILayout.Height(CompactControlHeight));
@@ -758,21 +786,21 @@ namespace TradersExtended
             }
 
             GUILayout.FlexibleSpace();
-            GUI.enabled = itemPage > 0;
+            GUI.enabled = inheritedEnabled && (itemPage > 0);
             if (GUILayout.Button("◀", smallButtonStyle, GUILayout.Width(28f), GUILayout.Height(CompactControlHeight)))
             {
                 itemPage--;
                 itemScroll = Vector2.zero;
             }
-            GUI.enabled = true;
+            GUI.enabled = inheritedEnabled;
             GUILayout.Label($"Page {itemPage + 1}/{pageCount}", centeredMutedStyle, GUILayout.Width(75f), GUILayout.Height(CompactControlHeight));
-            GUI.enabled = itemPage + 1 < pageCount;
+            GUI.enabled = inheritedEnabled && (itemPage + 1 < pageCount);
             if (GUILayout.Button("▶", smallButtonStyle, GUILayout.Width(28f), GUILayout.Height(CompactControlHeight)))
             {
                 itemPage++;
                 itemScroll = Vector2.zero;
             }
-            GUI.enabled = true;
+            GUI.enabled = inheritedEnabled;
             GUILayout.Label($"Rows: {itemDocument.Rows.Count}; filtered: {filteredRows.Count}", centeredMutedStyle, GUILayout.Width(180f), GUILayout.Height(CompactControlHeight));
             GUILayout.EndHorizontal();
 
@@ -868,13 +896,14 @@ namespace TradersExtended
 
         private ItemRowAction DrawItemRow(EditorItemRow row, int rowIndex)
         {
+            bool inheritedEnabled = GUI.enabled;
             ItemRowValidation validation = BuildItemRowValidation(row);
             row.ValidationError = validation.Combined;
             float prefabWidth = GetItemPrefabColumnWidth();
             ItemRowAction action = ItemRowAction.None;
 
             GUILayout.BeginHorizontal(itemRowStyle, GUILayout.Height(CompactRowHeight));
-            bool selected = ConfigEditorGui.ToggleLayout(theme, row.Selected, GUIContent.none, 22f, mutedStyle, 0f);
+            bool selected = Controls.ToggleLayout(theme, row.Selected, GUIContent.none, 22f, mutedStyle, 0f);
             if (selected != row.Selected)
                 row.Selected = selected;
             ItemColumnGap();
@@ -905,16 +934,16 @@ namespace TradersExtended
                 action = ItemRowAction.Delete;
             ItemColumnGap();
 
-            GUI.enabled = rowIndex > 0;
+            GUI.enabled = inheritedEnabled && (rowIndex > 0);
             if (DrawQuickActionButton("↑", "Move row up"))
                 action = ItemRowAction.MoveUp;
-            GUI.enabled = true;
+            GUI.enabled = inheritedEnabled;
             ItemColumnGap();
 
-            GUI.enabled = rowIndex >= 0 && rowIndex + 1 < itemDocument.Rows.Count;
+            GUI.enabled = inheritedEnabled && (rowIndex >= 0 && rowIndex + 1 < itemDocument.Rows.Count);
             if (DrawQuickActionButton("↓", "Move row down"))
                 action = ItemRowAction.MoveDown;
-            GUI.enabled = true;
+            GUI.enabled = inheritedEnabled;
             ItemColumnGap();
 
             if (IsItemColumnVisible(ItemSortColumn.LocalizedName))
@@ -1034,7 +1063,7 @@ namespace TradersExtended
         private void DrawItemColumnToggle(ItemSortColumn column, string label, float width)
         {
             bool visible = IsItemColumnVisible(column);
-            bool changed = ConfigEditorGui.ToggleLayout(theme, visible, new GUIContent(label), width, singleLineMutedStyle, 0f, 22f);
+            bool changed = Controls.ToggleLayout(theme, visible, new GUIContent(label), width, singleLineMutedStyle, 0f, 22f);
             if (changed != visible)
                 SetItemColumnVisible(column, changed);
         }
@@ -1054,9 +1083,10 @@ namespace TradersExtended
 
         private void DrawTraderSetting(TraderSettingState state)
         {
+            bool inheritedEnabled = GUI.enabled;
             GUILayout.BeginVertical(rowStyle);
             GUILayout.BeginHorizontal();
-            bool hasOverride = ConfigEditorGui.ToggleLayout(theme, state.HasOverride, GUIContent.none, 22f, mutedStyle, 0f);
+            bool hasOverride = Controls.ToggleLayout(theme, state.HasOverride, GUIContent.none, 22f, mutedStyle, 0f);
             if (hasOverride != state.HasOverride)
             {
                 state.HasOverride = hasOverride;
@@ -1076,9 +1106,9 @@ namespace TradersExtended
             }
 
             GUILayout.Label(new GUIContent(state.Definition.Name, state.Definition.Description), GUILayout.Width(360f));
-            GUI.enabled = state.HasOverride;
+            GUI.enabled = inheritedEnabled && (state.HasOverride);
             DrawTraderValue(state);
-            GUI.enabled = true;
+            GUI.enabled = inheritedEnabled;
 
             if (!state.HasOverride)
                 GUILayout.Label("Inherited: " + FormatValue(state.Definition.Type, state.Definition.Fallback(traderDocument.Trader)), mutedStyle, GUILayout.Width(240f));
@@ -1095,7 +1125,7 @@ namespace TradersExtended
                 case TraderSettingType.Boolean:
                 {
                     bool current = state.Value is bool boolean && boolean;
-                    bool changed = ConfigEditorGui.ToggleLayout(theme, current, new GUIContent(current ? "Enabled" : "Disabled"), 150f);
+                    bool changed = Controls.ToggleLayout(theme, current, new GUIContent(current ? "Enabled" : "Disabled"), 150f);
                     if (changed != current)
                     {
                         state.Value = changed;
@@ -1110,6 +1140,7 @@ namespace TradersExtended
                     if (!string.Equals(text, state.EditText, StringComparison.Ordinal))
                     {
                         state.EditText = text;
+                        traderDocument.Dirty = true;
                         if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed))
                         {
                             state.Value = parsed;
@@ -1129,7 +1160,8 @@ namespace TradersExtended
                     if (!string.Equals(text, state.EditText, StringComparison.Ordinal))
                     {
                         state.EditText = text;
-                        if (float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed))
+                        traderDocument.Dirty = true;
+                        if (float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed) && IsFinite(parsed))
                         {
                             state.Value = parsed;
                             state.ValidationError = string.Empty;
@@ -1192,8 +1224,9 @@ namespace TradersExtended
                     {
                         state.VectorXText = x;
                         state.VectorYText = y;
+                        traderDocument.Dirty = true;
                         if (float.TryParse(x, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsedX) &&
-                            float.TryParse(y, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsedY))
+                            float.TryParse(y, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsedY) && IsFinite(parsedX) && IsFinite(parsedY))
                         {
                             state.Value = new Vector2(parsedX, parsedY);
                             state.ValidationError = string.Empty;
@@ -1211,6 +1244,7 @@ namespace TradersExtended
 
         private void DrawNewFileWindow(int windowId)
         {
+            bool inheritedEnabled = GUI.enabled;
             GUILayout.BeginVertical();
             newFileScroll = GUILayout.BeginScrollView(newFileScroll, GUILayout.ExpandHeight(true));
 
@@ -1272,10 +1306,10 @@ namespace TradersExtended
 
             GUILayout.EndScrollView();
             GUILayout.BeginHorizontal(toolbarStyle, GUILayout.Height(34f));
-            GUI.enabled = string.IsNullOrEmpty(error) && !requestInProgress;
+            GUI.enabled = inheritedEnabled && (string.IsNullOrEmpty(error) && !requestInProgress);
             if (GUILayout.Button("Create", smallButtonStyle, GUILayout.Height(28f)))
                 CreateNewFile(fileName);
-            GUI.enabled = true;
+            GUI.enabled = inheritedEnabled;
             if (GUILayout.Button("Cancel", smallButtonStyle, GUILayout.Height(28f)))
                 showNewFile = false;
             GUILayout.EndHorizontal();
@@ -1286,6 +1320,7 @@ namespace TradersExtended
 
         private void DrawItemPickerWindow(int windowId)
         {
+            bool inheritedEnabled = GUI.enabled;
             bool traderPickerMode = temporaryTraderOptions != null;
             bool closeRequested = false;
             string selectedPrefab = null;
@@ -1315,7 +1350,7 @@ namespace TradersExtended
                 DrawItemPickerSortButton("Prefab", ItemPickerSortColumn.Prefab, 70f);
                 DrawItemPickerSortButton("Name", ItemPickerSortColumn.LocalizedName, 64f);
                 GUILayout.Space(3f);
-                bool showAll = ConfigEditorGui.ToggleLayout(theme, configEditorShowAllItems?.Value == true,
+                bool showAll = Controls.ToggleLayout(theme, configEditorShowAllItems?.Value == true,
                     new GUIContent("Show all", "Include AI equipment and items without a normal user-facing name, description or icon."), 70f,
                     singleLineMutedStyle, 0f);
                 if (configEditorShowAllItems != null && showAll != configEditorShowAllItems.Value)
@@ -1385,21 +1420,21 @@ namespace TradersExtended
 
             GUILayout.Space(4f);
             GUILayout.BeginHorizontal(GUILayout.Height(ItemPickerControlHeight));
-            GUI.enabled = itemPickerPage > 0;
+            GUI.enabled = inheritedEnabled && (itemPickerPage > 0);
             if (GUILayout.Button("Previous", smallButtonStyle, GUILayout.Width(72f), GUILayout.Height(ItemPickerControlHeight)))
             {
                 itemPickerPage--;
                 itemPickerScroll = Vector2.zero;
             }
-            GUI.enabled = true;
+            GUI.enabled = inheritedEnabled;
             GUILayout.Label($"Page {itemPickerPage + 1}/{pageCount} — {optionCount} result(s)", centeredMutedStyle, GUILayout.ExpandWidth(true), GUILayout.Height(ItemPickerControlHeight));
-            GUI.enabled = itemPickerPage + 1 < pageCount;
+            GUI.enabled = inheritedEnabled && (itemPickerPage + 1 < pageCount);
             if (GUILayout.Button("Next", smallButtonStyle, GUILayout.Width(60f), GUILayout.Height(ItemPickerControlHeight)))
             {
                 itemPickerPage++;
                 itemPickerScroll = Vector2.zero;
             }
-            GUI.enabled = true;
+            GUI.enabled = inheritedEnabled;
             if (GUILayout.Button("Close", smallButtonStyle, GUILayout.Width(58f), GUILayout.Height(ItemPickerControlHeight)))
                 closeRequested = true;
             GUILayout.EndHorizontal();
@@ -1428,6 +1463,7 @@ namespace TradersExtended
 
         private void DrawGlobalKeyWindow(int windowId)
         {
+            bool inheritedEnabled = GUI.enabled;
             GUILayout.BeginVertical();
             GUILayout.BeginHorizontal(GUILayout.Height(ItemPickerControlHeight));
             GUILayout.Label("Search", GUILayout.Width(49f), GUILayout.Height(ItemPickerControlHeight));
@@ -1455,7 +1491,7 @@ namespace TradersExtended
                 float toggleSize = theme.CompactToggleSize;
                 Rect toggleRect = new Rect(rowRect.x + 4f, rowRect.y + Mathf.Max(0f, (rowRect.height - toggleSize) * 0.5f), toggleSize, toggleSize);
                 bool selected = globalKeySelection.Contains(key);
-                bool changed = ConfigEditorGui.Toggle(theme, toggleRect, selected, GUIContent.none, keyNameStyle, 0f);
+                bool changed = Controls.Toggle(theme, toggleRect, selected, GUIContent.none, keyNameStyle, 0f);
                 if (changed && !selected)
                     globalKeySelection.Add(key);
                 else if (!changed && selected)
@@ -1484,7 +1520,7 @@ namespace TradersExtended
             GUILayout.Space(4f);
             GUILayout.BeginHorizontal(toolbarStyle, GUILayout.Height(ItemPickerControlHeight));
             newPickerKey = GUILayout.TextField(newPickerKey ?? string.Empty, GUILayout.ExpandWidth(true), GUILayout.Height(ItemPickerControlHeight));
-            GUI.enabled = !string.IsNullOrWhiteSpace(newPickerKey);
+            GUI.enabled = inheritedEnabled && (!string.IsNullOrWhiteSpace(newPickerKey));
             if (GUILayout.Button("Add key", smallButtonStyle, GUILayout.Width(58f), GUILayout.Height(ItemPickerControlHeight)))
             {
                 string key = newPickerKey.Trim();
@@ -1495,7 +1531,7 @@ namespace TradersExtended
                 }
                 newPickerKey = string.Empty;
             }
-            GUI.enabled = true;
+            GUI.enabled = inheritedEnabled;
             GUILayout.EndHorizontal();
 
             GUILayout.Space(4f);
@@ -1557,15 +1593,54 @@ namespace TradersExtended
             GUI.DragWindow(new Rect(0f, 0f, confirmRect.width, 24f));
         }
 
+        private bool EnsureTargetContext()
+        {
+            if (!targetChanged && targetRevision == ConfigEditorTransport.TargetRevision)
+                return true;
+            if (!targetChanged)
+            {
+                targetChanged = true;
+                ConfigEditorTransport.CancelPendingRequest();
+                requestInProgress = false;
+                selectAfterList = null;
+                files.Clear();
+                showConfirm = showNewFile = showGlobalKeyPicker = false;
+                CloseItemPicker();
+                SetStatus("Configuration target changed. The previous document is read-only; Refresh to select the current target.", true);
+            }
+            return false;
+        }
+
         private void RefreshFiles()
         {
+            if (!EnsureTargetContext())
+            {
+                if (IsDirty())
+                {
+                    ShowConfirmation("The connection changed. Discard unsaved changes and open the current configuration target?", ResetTargetAndRefresh);
+                    return;
+                }
+                ResetTargetAndRefresh();
+                return;
+            }
             BeginRequest("Loading configuration files...");
             ConfigEditorTransport.RequestList();
         }
 
+        private void ResetTargetAndRefresh()
+        {
+            activeFile = null;
+            itemDocument = null;
+            traderDocument = null;
+            targetRevision = ConfigEditorTransport.TargetRevision;
+            targetChanged = false;
+            traderDisplayNames.Clear();
+            RefreshFiles();
+        }
+
         private void SelectFile(EditorFileInfo file)
         {
-            if (file == null)
+            if (file == null || requestInProgress || !EnsureTargetContext())
                 return;
             if (activeFile != null && string.Equals(activeFile.Name, file.Name, StringComparison.OrdinalIgnoreCase))
                 return;
@@ -1581,6 +1656,8 @@ namespace TradersExtended
 
         private void OpenFile(EditorFileInfo file)
         {
+            if (!EnsureTargetContext())
+                return;
             activeFile = file;
             itemDocument = null;
             traderDocument = null;
@@ -1600,7 +1677,7 @@ namespace TradersExtended
 
         private void SaveActiveFile()
         {
-            if (activeFile == null || requestInProgress)
+            if (activeFile == null || requestInProgress || !EnsureTargetContext())
                 return;
 
             try
@@ -1636,7 +1713,7 @@ namespace TradersExtended
 
         private void RevertActiveFile()
         {
-            if (activeFile == null)
+            if (!EnsureTargetContext() || activeFile == null || requestInProgress)
                 return;
             if (IsDirty())
                 ShowConfirmation("Discard unsaved changes and reload this file?", () => OpenFile(activeFile));
@@ -1646,11 +1723,13 @@ namespace TradersExtended
 
         private void DeleteActiveFile()
         {
-            if (activeFile == null || requestInProgress)
+            if (activeFile == null || requestInProgress || !EnsureTargetContext())
                 return;
             string fileName = activeFile.Name;
             ShowConfirmation($"Delete '{fileName}' from {ConfigEditorTransport.TargetDescription}?", () =>
             {
+                if (!EnsureTargetContext() || requestInProgress)
+                    return;
                 BeginRequest("Deleting " + fileName + "...");
                 ConfigEditorTransport.RequestDelete(fileName);
             });
@@ -1658,6 +1737,8 @@ namespace TradersExtended
 
         private void OpenNewFileWindow()
         {
+            if (!EnsureTargetContext() || requestInProgress)
+                return;
             if (!ConfigEditorTransport.CanEditTarget)
             {
                 SetStatus("Administrator access is required to create files on this server.", true);
@@ -1675,6 +1756,8 @@ namespace TradersExtended
 
         private void OpenNewFileWindowImmediate()
         {
+            if (!EnsureTargetContext() || requestInProgress)
+                return;
             activeFile = null;
             itemDocument = null;
             traderDocument = null;
@@ -1691,6 +1774,8 @@ namespace TradersExtended
 
         private void CreateNewFile(string fileName)
         {
+            if (!EnsureTargetContext() || requestInProgress)
+                return;
             string content = newFileKind == EditorConfigKind.ItemList
                 ? ConfigEditorSerialization.SerializeItems(Array.Empty<TradeableItem>(), Path.GetExtension(fileName))
                 : ConfigEditorSerialization.SerializeTrader(new JObject(), Path.GetExtension(fileName));
@@ -1700,8 +1785,12 @@ namespace TradersExtended
             ConfigEditorTransport.RequestCreate(fileName, content);
         }
 
+        private void OnTransferProgress() => requestStartedAt = Time.realtimeSinceStartup;
+
         private void OnTransportResponse(ConfigEditorOperation operation, bool success, string fileName, string message, string payload)
         {
+            if (!isOpen || !EnsureTargetContext())
+                return;
             requestInProgress = false;
             SetStatus(success ? string.Empty : message, !success);
             if (!success)
@@ -1726,11 +1815,17 @@ namespace TradersExtended
                     }
                     else if (activeFile != null)
                     {
-                        activeFile = files.FirstOrDefault(entry => string.Equals(entry.Name, activeFile.Name, StringComparison.OrdinalIgnoreCase));
-                        if (activeFile == null)
+                        EditorFileInfo refreshed = files.FirstOrDefault(entry => string.Equals(entry.Name, activeFile.Name, StringComparison.OrdinalIgnoreCase));
+                        if (refreshed == null && IsDirty())
+                            SetStatus("The file no longer exists. Unsaved changes are retained until explicitly discarded.", true);
+                        else
                         {
-                            itemDocument = null;
-                            traderDocument = null;
+                            activeFile = refreshed;
+                            if (activeFile == null)
+                            {
+                                itemDocument = null;
+                                traderDocument = null;
+                            }
                         }
                     }
                     break;

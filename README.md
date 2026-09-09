@@ -1,4 +1,4 @@
-﻿# Traders Extended
+# Traders Extended
 
 ![logo](https://staticdelivery.nexusmods.com/mods/3667/images/headers/2509_1710675587.jpg)
 
@@ -340,9 +340,39 @@ The item picker hides AI equipment and non-user-facing or invalid entries by def
 
 Personal trader settings use typed controls. Enable `Override` only for values that should differ for that trader; disabled values continue to inherit the synchronized BepInEx configuration. Item-prefab fields provide a searchable picker, and Store GUI position is edited as separate `x` and `y` values.
 
-When connected to a dedicated server, the editor requests access from the server and the server checks the requesting peer directly against its current server administrator list (`adminlist.txt`). The client does not rely on `LocalPlayerIsAdminOrHost()` or a locally synchronized copy of the list. Every file operation is authorized again on the server before it is executed. Saving a file validates it, writes it to the selected local or server directory, and reloads the Traders Extended configuration.
+When connected to a dedicated server, the editor requests access from the server and the server checks the requesting peer directly against its current server administrator list (`adminlist.txt`). The client does not rely on `LocalPlayerIsAdminOrHost()` or a locally synchronized copy of the list. Every file operation is authorized again using the actual network connection before it is executed. The remote editor requires the updated build on both client and server. Access can be retried with Refresh after a timeout; old replies cannot grant access to a new session. Saving a file validates it, writes it to the selected local or server directory, and reloads the Traders Extended configuration.
 
 The editor uses Valheim Profiler-style window behavior: monitor-aware GUI scaling, Valheim accessibility scaling, dragging, resizing from the right or bottom edge and the lower-right handle, a draggable separator between the file list and editor, and square scrollbars. `Prevent input` can be changed directly in the editor header and is also available as a local BepInEx setting. `Configuration editor shortcut`, window position and size, `Scale`, `Use Valheim GUI scaling`, `Font size`, `File list width`, `Show all items`, and `Visible item columns` are stored together in the local `Configuration editor` section. `Visible item columns` is a comma-separated list using the tokens `Prefab`, `Name`, `Stack`, `Price`, `Quality`, `Currency`, `RequiredGlobalKey`, `BlockedGlobalKey`, `RequiredPlayerKey`, and `BlockedPlayerKey`.
+
+## Trading amounts
+
+Double-click a buy or sell row, or use the alternate gamepad action, to open the amount dialog. The slider counts
+whole trade lots: an offer with `stack: 20` and `price: 10` bought three times delivers 60 items for 30 currency.
+Configured multi-item sell lots work the same way; an incomplete remainder stays in the inventory. Ordinary combined
+sell rows count individual items. The preview shows the delivered item count and the total payment, and limits reflect
+available inventory space, payment currency and trader funds. The dialog does not open when fewer than two whole
+lots can be traded; use the regular Buy or Sell button for a single lot. When flexible pricing is enabled, the title
+shows the same colored discount/markup percentage as the corresponding store header. Flexible sale prices are rounded
+down once for the whole trade (with a minimum of one currency), consistently in the list, preview and payout.
+Buyback remains one indivisible receipt rather than a splittable offer.
+
+After selling, the sell list remains selected, including when buyback adds a new entry to the buy list. When an offer
+is exhausted, the nearest remaining sell row is selected; an empty sell list does not force selection to the buy pane.
+
+## Moving the store panels
+
+Hold `LeftAlt` and drag anywhere on a panel with the left mouse button, including over filters, item lists and
+buttons. Both store columns move together; the amount dialog can be moved independently. While the key is held,
+mouse gestures move the panel instead of activating the controls underneath. Without the key, buttons, text fields,
+list scrolling and the amount slider keep their normal behavior.
+The key can be changed through `Store UI / Drag key` (`None` disables dragging).
+
+Positions are saved locally as `Store panel offset` and `Amount dialog offset` in the `Store UI` section. They are
+not synchronized with the server. The store offset is added to the trader's configured position or its normal
+Epic Loot-compatible position. Set an offset to `0, 0` to restore that panel's default placement.
+
+`Store UI / Reset panel positions on open` is disabled by default. Enabling it clears both offsets whenever a new
+trader dialog is opened. Opening another amount dialog during the same visit does not reset its position.
 
 ## Custom currencies
 
@@ -356,13 +386,41 @@ The left side is the trader prefab/name and the right side is an item prefab use
 
 A personal trader settings file can set `Trader currency / Override` to one currency prefab for that trader. Any buy- or sell-list entry can then override the trader currency again with its own `currency` field.
 
+YamlDotNet is a separate required dependency. The Thunderstore package `ValheimModding-YamlDotNet-16.3.1` contains YamlDotNet 16.3.0. For manual installations, install the YAML dependency separately. Conditional Config Sync also remains a separate required dependency.
+
 The amount dialog, affordability checks, list icons, sale payouts, buyback, and actual transaction all use the selected entry's currency. An invalid currency prefab is logged and falls back to the trader's normal currency.
 
 ## Price tooltips
 
-Items with entries in sell configs receive a `Trader value` section in their normal tooltip. Explicit common values are shown first, followed by trader-specific values. Automatically generated common values are shown as common when enabled for every known trader; otherwise they are shown only for the traders whose personal or BepInEx settings enable `Add common valuable items to sell list`.
+`Item tooltips / Hide vanilla item value` is enabled by default and is local-only. With this setting enabled, an
+item with one applicable common per-item price in Coins and no other price records uses Valheim's native value
+line, including the stack total. The configured price is substituted only while generating the tooltip, and no
+additional price section is appended. Trade lots, alternate currencies and totals outside the native integer range
+use detailed rows so their meaning is not lost in a per-item coin value.
 
-A trader-specific value is not repeated when its applicable price, stack, and effective currency duplicate an explicit common value. Requirement-gated prices are shown only while their global-key and player-key requirements are met.
+Other items have their original vanilla value line suppressed. Multiple common prices or trader-specific prices
+appear below a colored, localized `$item_value` heading, with one applicable entry per line. Common entries use
+`Currency: amount`; trader entries use `Trader: amount` for Coins or `Trader (Currency): amount` for other currencies.
+Amounts are orange, trader names are uncolored, and configured stack and `$item_quality` details follow the amount.
+Explicit trader entries remain visible even when their prices match a common entry. Inherited common entries are
+not duplicated unless the trader's effective currency differs. Entries without an explicit currency use a discovered
+trader's default, preferring Coins for the common row; differing defaults are shown on the corresponding trader rows.
+
+All displayed prices remain base configuration values, before the current flexible-pricing modifier. The underlying
+item value is restored in the tooltip finalizer, including after exceptions and nested calls; trading is unchanged.
+Items without an available price, including coins, have no value line. Disable `Hide vanilla item value` to keep the
+original vanilla value and show configured prices in the detailed section instead.
+
+Prices are hidden until the corresponding trader's static location icon has been revealed on the map. Before any
+trader is discovered, neither substituted native values nor detailed prices are shown. Automatically generated
+common values are shared only when enabled for every discovered trader; otherwise they are shown for the traders
+whose settings enable `Add common valuable items to sell list`. Global-key, player-key and quality requirements
+continue to control which price entries apply.
+
+Discovery uses the client's current location-icon list, including icons shared by the server. It does not require the
+trader to be loaded nearby or the map window to be open. The standard Haldor, Hildir and Bog Witch camp icons are
+recognized; a custom trader is recognized by a static location icon named after its trader prefab or `<trader>_camp`.
+The price cache is initialized at `ZoneSystem.Start` and rebuilt when configuration data changes, not on each tooltip.
 
 ## Discovery
 
@@ -390,7 +448,7 @@ When the amount is omitted, that trader's configured replenishment minimum is us
 
 Buyback is stored separately for each trader. An item sold to one trader cannot be bought back from another trader.
 
-Buyback data is saved in the character's custom data and grouped by world identifier, so it survives logout and does not leak between worlds. `Buyback lifetime in world seconds` controls expiration. Set it to `0` to keep buyback entries until they are replaced or purchased.
+Buyback data is saved in the character's custom data and grouped by world identifier, so it survives logout and does not leak between worlds. Bulk sale receipts retain each sold stack rather than copying the metadata of one representative item. `Buyback lifetime in world seconds` controls expiration. Set it to `0` to keep buyback entries until they are replaced or purchased.
 
 ## Epic Loot compatibility
 

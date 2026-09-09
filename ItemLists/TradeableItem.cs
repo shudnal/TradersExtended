@@ -1,4 +1,4 @@
-﻿using BepInEx;
+using BepInEx;
 using Newtonsoft.Json;
 using System;
 using System.Linq;
@@ -78,14 +78,14 @@ namespace TradersExtended
                         itemDrop = itemPrefab.GetComponent<ItemDrop>();
                 }
 
-                if (itemDrop == null)
+                if (itemDrop == null || !TradeAmounts.TryEncodeStack(stack, quality, qualityStackMultiplier, out int encodedStack))
                     return null;
 
                 return new Trader.TradeItem
                 {
                     m_prefab = itemDrop,
                     m_price = price,
-                    m_stack = GetStackFromStackQuality(stack, quality),
+                    m_stack = encodedStack,
                     m_requiredGlobalKey = requiredGlobalKey
                 };
             }
@@ -107,7 +107,9 @@ namespace TradersExtended
 
             public static int GetStackFromStackQuality(int stack, int quality)
             {
-                return stack + qualityStackMultiplier * quality;
+                if (!TradeAmounts.TryEncodeStack(stack, quality, qualityStackMultiplier, out int encoded))
+                    throw new ArgumentOutOfRangeException(nameof(stack), "Trade stack and quality cannot be represented safely.");
+                return encoded;
             }
 
             public static int GetStackFromStack(int encodedStack)

@@ -1,8 +1,9 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Events;
 using static TradersExtended.TradersExtended;
 
 namespace TradersExtended
@@ -10,6 +11,12 @@ namespace TradersExtended
     internal static class AmountDialog
     {
         private static float clickTime;
+        private static object lastClickedOffer;
+        private static bool lastClickWasSell;
+        private static Trader dialogTrader;
+        private static Trader.TradeItem buyOffer;
+        private static StorePanel.ItemToSell sellOffer;
+        private static int lotSize;
 
         private static GameObject amountDialog;
         private static Slider sliderDialog;
@@ -22,6 +29,9 @@ namespace TradersExtended
         private static string sliderTitleText;
         private static string sliderButtonText;
         private static StoreGui storeGui;
+        private static RectTransform dialogBackground;
+        private static Vector2 defaultDialogPosition;
+        private static Vector2? previewDialogOffset;
 
         private const float m_splitNumInputTimeoutSec = 0.5f;
         private static string m_splitInput = "";
@@ -34,8 +44,12 @@ namespace TradersExtended
 
             amountDialog = UnityEngine.Object.Instantiate(InventoryGui.instance.m_splitPanel.gameObject, storeGui.m_rootPanel.transform.parent);
             amountDialog.name = "AmountDialog";
+            amountDialog.SetActive(false);
 
             Transform win_bkg = amountDialog.transform.Find("win_bkg");
+            dialogBackground = win_bkg.GetComponent<RectTransform>();
+            defaultDialogPosition = dialogBackground.anchoredPosition;
+            previewDialogOffset = null;
 
             sliderTitle = win_bkg.Find("Text").GetComponent<TMP_Text>();
             sliderDialog = win_bkg.Find("Slider").GetComponent<Slider>();
@@ -82,11 +96,53 @@ namespace TradersExtended
 
             sliderEqual.GetComponent<TMP_Text>().SetText("=");
 
+            // The cloned panel must never call InventoryGui's inventory-splitting handlers.
+            Button confirm = win_bkg.Find("Button_ok").GetComponent<Button>();
+            Button cancel = win_bkg.Find("Button_cancel").GetComponent<Button>();
+            DisablePersistentListeners(sliderDialog.onValueChanged);
+            DisablePersistentListeners(confirm.onClick);
+            DisablePersistentListeners(cancel.onClick);
+            sliderDialog.onValueChanged.RemoveAllListeners();
+            confirm.onClick.RemoveAllListeners();
+            cancel.onClick.RemoveAllListeners();
+            sliderDialog.wholeNumbers = true;
             sliderDialog.onValueChanged.AddListener(OnSplitSliderChanged);
-            win_bkg.Find("Button_ok").GetComponent<Button>().onClick.AddListener(OnOkClick);
-            win_bkg.Find("Button_cancel").GetComponent<Button>().onClick.AddListener(Close);
+            confirm.onClick.AddListener(OnOkClick);
+            cancel.onClick.AddListener(Close);
+
+            StorePanel.DragHandle.Configure(StorePanel.DragHandle.CreateBackground(dialogBackground), dialogBackground, IsOpen,
+                GetPanelOffset, PreviewPanelOffset, CommitPanelOffset);
+            SetPanelPosition();
 
             return amountDialog;
+        }
+
+        private static Vector2 GetPanelOffset() =>
+            StorePanel.FinitePanelOffset(previewDialogOffset ?? amountDialogOffset.Value);
+
+        private static void PreviewPanelOffset(Vector2 offset)
+        {
+            previewDialogOffset = offset;
+            SetPanelPosition();
+        }
+
+        private static void CommitPanelOffset(Vector2 offset)
+        {
+            previewDialogOffset = null;
+            amountDialogOffset.Value = StorePanel.FinitePanelOffset(offset);
+            SetPanelPosition();
+        }
+
+        internal static void SetPanelPosition()
+        {
+            if (dialogBackground != null && amountDialogOffset != null)
+                dialogBackground.anchoredPosition = defaultDialogPosition + GetPanelOffset();
+        }
+
+        private static void DisablePersistentListeners(UnityEventBase unityEvent)
+        {
+            for (int index = 0; index < unityEvent.GetPersistentEventCount(); index++)
+                unityEvent.SetPersistentListenerState(index, UnityEventCallState.Off);
         }
 
         public static void UpdateCurrencyIcon(ItemDrop currency)
@@ -107,15 +163,17 @@ namespace TradersExtended
 
         public static void OnSelectedTradeableItemClick(bool sellDialog)
         {
+            object offer = sellDialog ? (object)StorePanel.selectedItem : storeGui?.m_selectedItem;
+            bool doubleClick = offer != null && ReferenceEquals(offer, lastClickedOffer) &&
+                lastClickWasSell == sellDialog && Time.unscaledTime - clickTime < 0.3f;
             SetSellState(sellDialog);
-            if (Time.time - clickTime < 0.3f)
+            lastClickedOffer = offer;
+            lastClickWasSell = sellDialog;
+            clickTime = Time.unscaledTime;
+            if (doubleClick)
             {
                 Open();
-                clickTime = 0f;
-            }
-            else
-            {
-                clickTime = Time.time;
+                lastClickedOffer = null;
             }
         }
 
@@ -126,7 +184,7 @@ namespace TradersExtended
 
         public static void Update()
         {
-            if (amountDialog == null)
+            if (!IsOpen())
                 return;
 
             Player localPlayer = Player.m_localPlayer;
@@ -136,11 +194,19 @@ namespace TradersExtended
                 return;
             }
 
-            if (sliderDialog == null)
+            if (!IsCurrentOffer())
+            {
+                Close();
                 return;
+            }
 
-            if (!sliderDialog.gameObject.activeInHierarchy)
+            int maximum = GetMaximumLots();
+            if (maximum < 2)
+            {
+                Close();
                 return;
+            }
+            sliderDialog.maxValue = maximum;
 
             // Gamepad compatibility
             sliderTitle.SetText(sliderTitleText);
@@ -204,6 +270,7 @@ namespace TradersExtended
             if (ZInput.GetKeyDown(KeyCode.KeypadEnter) || ZInput.GetKeyDown(KeyCode.Return))
             {
                 BuySelectedItem();
+                return;
             }
 
             if ((Chat.instance == null || !Chat.instance.HasFocus()) && !Console.IsVisible() && !Menu.IsVisible() && (bool)TextViewer.instance && !TextViewer.instance.IsVisible() && !localPlayer.InCutscene() && (ZInput.GetButtonDown("JoyButtonB") || ZInput.GetKeyDown(KeyCode.Escape)))
@@ -215,192 +282,107 @@ namespace TradersExtended
 
         public static void Close()
         {
-            amountDialog?.SetActive(value: false);
+            if (amountDialog != null)
+                amountDialog.SetActive(false);
+            buyOffer = null;
+            sellOffer = null;
+            dialogTrader = null;
+            lastClickedOffer = null;
+            m_splitInput = string.Empty;
+        }
+
+        private static bool IsCurrentOffer()
+        {
+            return storeGui != null && storeGui.m_rootPanel.activeInHierarchy && dialogTrader != null &&
+                storeGui.m_trader == dialogTrader && Player.m_localPlayer != null &&
+                (isSellDialog ? ReferenceEquals(StorePanel.selectedItem, sellOffer) && sellOffer != null :
+                    ReferenceEquals(storeGui.m_selectedItem, buyOffer) && buyOffer != null);
+        }
+
+        private static int GetMaximumLots()
+        {
+            return isSellDialog ? StorePanel.GetMaximumSellLots(storeGui, sellOffer) : StorePanel.GetMaximumBuyLots(storeGui, buyOffer);
         }
 
         public static void Open()
         {
-            if (amountDialog == null)
+            if (amountDialog == null || storeGui?.m_trader == null || Player.m_localPlayer == null)
                 return;
 
-            LogInfo(isSellDialog);
-            if (isSellDialog)
-            {
-                StorePanel.ItemToSell selectedItem = StorePanel.selectedItem;
+            dialogTrader = storeGui.m_trader;
+            sellOffer = isSellDialog ? StorePanel.selectedItem : null;
+            buyOffer = isSellDialog ? null : storeGui.m_selectedItem;
+            if (!IsCurrentOffer() || (!isSellDialog && StorePanel.ItemToSell.IsBuyBackItem(buyOffer)))
+                return;
 
-                if (selectedItem == null)
-                    return;
+            int maximum = GetMaximumLots();
+            if (maximum < 2)
+                return;
 
-                if (selectedItem.itemType != StorePanel.ItemToSell.ItemType.Combined)
-                    return;
-
-                if (selectedItem.pricePerItem == 0)
-                    return;
-
-                if (!Player.m_localPlayer.GetInventory().HaveItem(selectedItem.item.m_shared.m_name))
-                    return;
-
-                int maxStack = Math.Min(selectedItem.amount, selectedItem.item.m_shared.m_maxStackSize);
-                if (TraderConfigManager.Get(storeGui.m_trader).TradersUseCoins)
-                {
-                    maxStack = GetMaximumAffordableSellAmount(TraderCoins.GetTraderCoins(), maxStack);
-                    if (maxStack < 1)
-                        return;
-                }
-
-                SetDialogAndOpen(selectedItem.item, maxStack, selectedItem.currency ?? storeGui.m_coinPrefab);
-            }
-            else
-            {
-                if (!Player.m_localPlayer.GetInventory().HaveEmptySlot())
-                    return;
-
-                Trader.TradeItem selectedItem = storeGui.m_selectedItem;
-
-                if (selectedItem == null || StorePanel.ItemToSell.IsBuyBackItem(selectedItem))
-                    return;
-
-                if (selectedItem.m_prefab == null || selectedItem.m_price <= 0)
-                    return;
-
-                int currencyAmount = TraderCurrency.GetPlayerCurrencyAmount(selectedItem, storeGui);
-
-                if (TradeableItem.GetStackFromStack(selectedItem.m_stack) != 1)
-                    return;
-
-                if (selectedItem.m_prefab.m_itemData.m_shared.m_maxStackSize == 1)
-                    return;
-
-                if (currencyAmount < selectedItem.m_price)
-                    return;
-
-                SetDialogAndOpen(
-                    selectedItem.m_prefab.m_itemData,
-                    currencyAmount / selectedItem.m_price,
-                    TraderCurrency.GetCurrency(selectedItem, storeGui));
-            }
-        }
-
-        private static void SetDialogAndOpen(ItemDrop.ItemData item, int maxValue, ItemDrop currency)
-        {
+            lotSize = isSellDialog ? StorePanel.GetSellLotSize(sellOffer) : TradeableItem.GetStackFromStack(buyOffer.m_stack);
+            ItemDrop.ItemData item = isSellDialog ? sellOffer.item : buyOffer.m_prefab.m_itemData;
+            ItemDrop currency = isSellDialog ? sellOffer.currency : TraderCurrency.GetCurrency(buyOffer, storeGui);
             sliderTitleText = Localization.instance.Localize(item.m_shared.m_name);
-
+            ResolvedTraderConfig config = TraderConfigManager.Get(dialogTrader);
+            if (config.TradersUseCoins && config.TradersUseFlexiblePricing)
+                sliderTitleText += StorePanel.GetPriceFactorString(
+                    isSellDialog ? sellOffer.priceFactor : TraderCoins.GetPriceFactor(buyPrice: true), reversed: !isSellDialog);
+            sliderTitle.SetText(sliderTitleText);
             sliderButtonText = Localization.instance.Localize(isSellDialog ? "$store_sell" : "$store_buy");
-
-            sliderDialog.value = 1f;
             sliderDialog.minValue = 1f;
-            sliderDialog.maxValue = Math.Min(item.m_shared.m_maxStackSize, maxValue);
-
+            sliderDialog.maxValue = maximum;
+            sliderDialog.value = 1f;
+            m_splitInput = string.Empty;
             sliderImage.sprite = item.GetIcon();
-            UpdateCurrencyIcon(currency);
-
+            UpdateCurrencyIcon(currency ?? storeGui.m_coinPrefab);
             OnSplitSliderChanged();
-
-            amountDialog.SetActive(value: true);
+            SetPanelPosition();
+            amountDialog.SetActive(true);
         }
 
         public static void OnSplitSliderChanged(float value = 0f)
         {
-            sliderAmountText.SetText(((int)sliderDialog.value).ToString());
-            sliderAmountCoinsText.SetText(GetPrice().ToString());
+            if (sliderDialog == null || !IsCurrentOffer())
+                return;
+            int lots = Mathf.RoundToInt(sliderDialog.value);
+            if (!TryGetQuote(lots, out int amount, out int price))
+                return;
+            // The slider counts whole configured lots; the preview always shows delivered item count.
+            sliderAmountText.SetText(lotSize > 1 ? $"{amount} ({lots} x {lotSize})" : amount.ToString());
+            sliderAmountCoinsText.SetText(price.ToString());
+        }
+
+        private static bool TryGetQuote(int lots, out int amount, out int price)
+        {
+            amount = price = 0;
+            if (isSellDialog)
+                return StorePanel.TryGetSellQuote(sellOffer, lots, out amount, out price);
+            return buyOffer != null && TradeAmounts.TryGetItemCount(lotSize, lots, out amount) &&
+                TradeAmounts.TryGetPrice(buyOffer.m_price, lots, 1d, out price);
         }
 
         private static void BuySelectedItem()
         {
-            if (isSellDialog)
+            if (!IsOpen() || !IsCurrentOffer())
             {
-                if (TraderCanAffordSelectedItem())
-                {
-                    int amount = Mathf.CeilToInt(sliderDialog.value);
-                    int price = GetPrice();
-                    StorePanel.selectedItem.amount = amount;
-                    StorePanel.selectedItem.price = price;
-                    StorePanel.SellSelectedItem(storeGui);
-                }
+                Close();
+                return;
             }
-            else
-            {
-                if (CanAffordSelectedItem())
-                {
-                    Trader.TradeItem selectedItem = storeGui.m_selectedItem;
-                    int originalStack = selectedItem.m_stack;
-                    int originalPrice = selectedItem.m_price;
-                    try
-                    {
-                        TradeableItem.GetStackQualityFromStack(originalStack, out int _, out int quality);
-                        int stack = Mathf.Min(Mathf.CeilToInt(sliderDialog.value), selectedItem.m_prefab.m_itemData.m_shared.m_maxStackSize);
-                        selectedItem.m_stack = TradeableItem.GetStackFromStackQuality(stack, quality);
-                        long totalPrice = (long)originalPrice * stack;
-                        selectedItem.m_price = totalPrice >= int.MaxValue ? int.MaxValue : (int)totalPrice;
-                        storeGui.BuySelectedItem();
-                    }
-                    finally
-                    {
-                        selectedItem.m_stack = originalStack;
-                        selectedItem.m_price = originalPrice;
-                    }
-                }
-            }
-
+            int lots = Mathf.RoundToInt(sliderDialog.value);
+            bool canTrade = lots >= 1 && lots <= GetMaximumLots() && TryGetQuote(lots, out _, out _);
+            // Close before the trade refreshes/replaces the selected offer and invokes external callbacks.
             Close();
-        }
-
-        private static bool TraderCanAffordSelectedItem()
-        {
-            if (StorePanel.selectedItem == null)
-                return false;
-
-            return TraderCoins.CanSell(GetPrice());
-        }
-
-        private static bool CanAffordSelectedItem()
-        {
-            if (storeGui.m_selectedItem == null)
-                return false;
-
-            int playerCurrency = TraderCurrency.GetPlayerCurrencyAmount(storeGui.m_selectedItem, storeGui);
-            return GetPrice() <= playerCurrency && Player.m_localPlayer.GetInventory().HaveEmptySlot();
-        }
-
-        private static int GetPricePerItem()
-        {
-            return isSellDialog ? StorePanel.selectedItem.pricePerItem : storeGui.m_selectedItem.m_price;
+            if (!canTrade)
+                return;
+            if (isSellDialog)
+                StorePanel.SellSelectedItem(storeGui, lots);
+            else
+                StorePanel.BuyLots(storeGui, lots);
         }
 
         internal static int GetPrice()
         {
-            return GetPriceForAmount(Mathf.CeilToInt(sliderDialog.value));
-        }
-
-        private static int GetPriceForAmount(int amount)
-        {
-            if (amount <= 0)
-                return 0;
-
-            if (isSellDialog)
-                return StorePanel.CalculateSellPrice(GetPricePerItem(), amount);
-
-            double price = amount * (double)GetPricePerItem();
-            if (double.IsNaN(price) || price >= int.MaxValue)
-                return int.MaxValue;
-
-            return Math.Max((int)Math.Ceiling(price), 1);
-        }
-
-        private static int GetMaximumAffordableSellAmount(int balance, int maximumAmount)
-        {
-            int low = 0;
-            int high = Math.Max(maximumAmount, 0);
-            while (low < high)
-            {
-                int middle = low + (high - low + 1) / 2;
-                if (GetPriceForAmount(middle) <= balance)
-                    low = middle;
-                else
-                    high = middle - 1;
-            }
-
-            return low;
+            return sliderDialog != null && TryGetQuote(Mathf.RoundToInt(sliderDialog.value), out _, out int price) ? price : 0;
         }
 
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.OnSelectedItem))]

@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,43 +10,8 @@ namespace TradersExtended
 {
     internal static class TraderCoins
     {
-        internal enum BalanceOperation
-        {
-            Spend,
-            Receive
-        }
-
         private static Trader currentTrader;
         private static ZNetView traderNetView;
-        private static int spendTransactionDepth;
-        private static int receiveTransactionDepth;
-
-        private sealed class BalanceTransaction : IDisposable
-        {
-            private readonly BalanceOperation operation;
-            private bool disposed;
-
-            internal BalanceTransaction(BalanceOperation operation)
-            {
-                this.operation = operation;
-                if (operation == BalanceOperation.Spend)
-                    spendTransactionDepth++;
-                else
-                    receiveTransactionDepth++;
-            }
-
-            public void Dispose()
-            {
-                if (disposed)
-                    return;
-
-                disposed = true;
-                if (operation == BalanceOperation.Spend)
-                    spendTransactionDepth = Math.Max(spendTransactionDepth - 1, 0);
-                else
-                    receiveTransactionDepth = Math.Max(receiveTransactionDepth - 1, 0);
-            }
-        }
 
         public static TMP_Text playerCoins;
         public static TMP_Text traderCoins;
@@ -54,11 +19,6 @@ namespace TradersExtended
 
         private static readonly int s_traderCoins = "traderCoins".GetStableHashCode();
         private static readonly int s_traderCoinsReplenished = "traderCoinsReplenished".GetStableHashCode();
-
-        internal static IDisposable BeginBalanceTransaction(BalanceOperation operation)
-        {
-            return new BalanceTransaction(operation);
-        }
 
         public static List<string> GetTraderPrefabs()
         {
@@ -144,7 +104,7 @@ namespace TradersExtended
 
                 int newAmount = currentAmount >= maximum
                     ? Math.Max(maximum, currentAmount - Math.Max(config.CoinsRemovedDaily, 0))
-                    : Mathf.Clamp(currentAmount + config.CoinsReplenishedDaily, minimum, maximum);
+                    : Math.Max(minimum, Math.Min(maximum, TradeAmounts.ClampBalance((long)currentAmount + config.CoinsReplenishedDaily)));
 
                 zdo.Set(s_traderCoins, newAmount);
                 zdo.Set(s_traderCoinsReplenished, EnvMan.instance.GetCurrentDay());
@@ -189,78 +149,9 @@ namespace TradersExtended
             }
         }
 
-        [HarmonyPatch(typeof(Inventory), nameof(Inventory.RemoveItem), new Type[] { typeof(string), typeof(int), typeof(int), typeof(bool) })]
-        public static class Inventory_RemoveItem_TraderCoinsUpdate
-        {
-            private static void Prefix(Inventory __instance, string name, ref int __state)
-            {
-                __state = spendTransactionDepth > 0 && IsActiveCurrencySharedName(name) && IsLocalPlayerInventory(__instance)
-                    ? __instance.CountItems(name)
-                    : -1;
-            }
-
-            private static void Postfix(Inventory __instance, string name, int __state)
-            {
-                if (__state < 0)
-                    return;
-
-                int removed = __state - __instance.CountItems(name);
-                if (removed > 0)
-                    UpdateTraderCoins(removed);
-            }
-        }
-
-        [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), new Type[] { typeof(string), typeof(int), typeof(int), typeof(int), typeof(long), typeof(string), typeof(bool) })]
-        public static class Inventory_AddItem_String_TraderCoinsUpdate
-        {
-            private static void Prefix(Inventory __instance, string name, ref int __state)
-            {
-                ItemDrop currency = GetActiveCurrency();
-                __state = receiveTransactionDepth > 0 && currency != null && IsActiveCurrencyPrefabName(name) && IsLocalPlayerInventory(__instance)
-                    ? __instance.CountItems(currency.m_itemData.m_shared.m_name)
-                    : -1;
-            }
-
-            private static void Postfix(Inventory __instance, int __state)
-            {
-                if (__state < 0)
-                    return;
-
-                ItemDrop currency = GetActiveCurrency();
-                if (currency == null)
-                    return;
-
-                int added = __instance.CountItems(currency.m_itemData.m_shared.m_name) - __state;
-                if (added > 0)
-                    UpdateTraderCoins(-added);
-            }
-        }
-
-        private static bool IsLocalPlayerInventory(Inventory inventory)
-        {
-            return StorePanel.IsOpen() && Player.m_localPlayer != null && Player.m_localPlayer.GetInventory() == inventory;
-        }
-
-        private static ItemDrop GetActiveCurrency()
-        {
-            return StoreGui.instance != null ? StoreGui.instance.m_coinPrefab : null;
-        }
-
-        private static bool IsActiveCurrencySharedName(string name)
-        {
-            ItemDrop currency = GetActiveCurrency();
-            return currency != null && string.Equals(name, currency.m_itemData.m_shared.m_name, StringComparison.Ordinal);
-        }
-
-        private static bool IsActiveCurrencyPrefabName(string name)
-        {
-            ItemDrop currency = GetActiveCurrency();
-            return currency != null && string.Equals(name, Utils.GetPrefabName(currency.gameObject), StringComparison.Ordinal);
-        }
-
         public static bool CanSell(int price)
         {
-            return !GetCurrentConfig().TradersUseCoins || price <= GetTraderCoins();
+            return price > 0 && (!GetCurrentConfig().TradersUseCoins || price <= GetTraderCoins());
         }
 
         public static void UpdateTraderCoins(int amountToAdd = 0)
@@ -272,7 +163,7 @@ namespace TradersExtended
             if (netView == null || !netView.IsValid())
                 return;
 
-            netView.GetZDO().Set(s_traderCoins, Math.Max(GetTraderCoins() + amountToAdd, 0));
+            netView.GetZDO().Set(s_traderCoins, TradeAmounts.ClampBalance((long)GetTraderCoins() + amountToAdd));
 
             if (StorePanel.IsOpen())
                 StorePanel.UpdateNames();
@@ -296,7 +187,7 @@ namespace TradersExtended
             if (netView == null || !netView.IsValid())
                 return minimum;
 
-            return netView.GetZDO().GetInt(s_traderCoins, minimum);
+            return Math.Max(netView.GetZDO().GetInt(s_traderCoins, minimum), 0);
         }
 
         private static ZNetView GetTraderNetView()
@@ -351,7 +242,7 @@ namespace TradersExtended
         private static void GetPriceRange(ResolvedTraderConfig config, out int minimum, out int maximum)
         {
             minimum = Math.Max(config.CoinsAfterReplenishmentMinimum, 0);
-            maximum = Math.Max(config.CoinsAfterReplenishmentMaximum, minimum + 1);
+            maximum = Math.Max(config.CoinsAfterReplenishmentMaximum, minimum);
         }
 
         private static ResolvedTraderConfig GetCurrentConfig()
@@ -362,7 +253,9 @@ namespace TradersExtended
 
         private static float RoundFactorToPercent(float factor)
         {
-            return Mathf.Round(factor * 100f) / 100f;
+            if (float.IsNaN(factor) || float.IsInfinity(factor) || factor < 0f)
+                return 1f;
+            return (float)(Math.Round(factor * 100d) / 100d);
         }
     }
 }

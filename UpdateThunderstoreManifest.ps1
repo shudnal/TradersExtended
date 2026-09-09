@@ -1,6 +1,4 @@
-# Updates Thunderstore package manifest version_number.
-# Called from MSBuild after package files are prepared and before ZipThunderstore.
-
+# Updates only the local Thunderstore manifest version; never uploads a package.
 param(
     [Parameter(Mandatory = $true)][string]$ManifestPath,
     [Parameter(Mandatory = $true)][string]$Version
@@ -9,22 +7,30 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version 2.0
 
-$ProjectRoot = $PSScriptRoot
-$RepositoryRoot = Split-Path -Parent $ProjectRoot
-$CommonScript = Join-Path $RepositoryRoot "API\CommonPublish.ps1"
-. $CommonScript
+if (!(Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
+    throw "Thunderstore manifest was not found: $ManifestPath"
+}
 
-Assert-FileExists -Path $ManifestPath
-$PackageVersion = Normalize-PackageVersion -Version $Version -Name "Thunderstore version_number"
+$AssemblyVersion = $null
+if (![Version]::TryParse($Version, [ref]$AssemblyVersion) -or
+    $AssemblyVersion.Build -lt 0 -or $AssemblyVersion.Revision -gt 0) {
+    throw "Expected a three-part package version or a four-part assembly version ending in .0: $Version"
+}
+$PackageVersion = $AssemblyVersion.ToString(3)
+$Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
+if ($null -eq $Manifest -or $Manifest -isnot [pscustomobject] -or
+    $null -eq $Manifest.PSObject.Properties['version_number']) {
+    throw "Thunderstore manifest must be a JSON object containing version_number: $ManifestPath"
+}
 
-$Manifest = Get-JsonFile -Path $ManifestPath
 $OldVersion = [string]$Manifest.version_number
-$Manifest.version_number = $PackageVersion
-Save-JsonFile -Object $Manifest -Path $ManifestPath
-
 if ($OldVersion -eq $PackageVersion) {
     Write-Host "Thunderstore manifest version is already $PackageVersion"
+    return
 }
-else {
-    Write-Host "Thunderstore manifest version updated: $OldVersion -> $PackageVersion"
-}
+
+$Manifest.version_number = $PackageVersion
+$ManifestPath = (Resolve-Path -LiteralPath $ManifestPath).ProviderPath
+$Content = ($Manifest | ConvertTo-Json -Depth 100) + [Environment]::NewLine
+[IO.File]::WriteAllText($ManifestPath, $Content, ([Text.UTF8Encoding]::new($false)))
+Write-Host "Thunderstore manifest version updated: $OldVersion -> $PackageVersion"

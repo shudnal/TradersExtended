@@ -1,11 +1,11 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
 	<PropertyGroup>
 		<ModName>TradersExtended</ModName>
 	</PropertyGroup>
 
-	<Target Name="InitializePackagePublishProperties">
+	<Target Name="InitializePackageProperties">
 		<PropertyGroup>
 			<EffectiveModName Condition="'$(ModName)' != ''">$(ModName)</EffectiveModName>
 			<EffectiveModName Condition="'$(EffectiveModName)' == '' and '$(TargetName)' != ''">$(TargetName)</EffectiveModName>
@@ -17,6 +17,9 @@
 
 			<ThunderstorePackageDir>$(ProjectDir)package\thunderstore\$(EffectiveModName)\</ThunderstorePackageDir>
 			<ThunderstoreZipPath>$(ProjectDir)package\thunderstore\$(EffectiveModName).zip</ThunderstoreZipPath>
+
+			<NexusRepackDir>$(TargetDir)nexus\</NexusRepackDir>
+			<NexusRepackDllPath>$(NexusRepackDir)$(TargetFileName)</NexusRepackDllPath>
 
 			<NexusPackageDir>$(ProjectDir)package\nexus\</NexusPackageDir>
 			<NexusPackageContentDir>$(ProjectDir)package\nexus\$(EffectiveModName)\</NexusPackageContentDir>
@@ -33,7 +36,7 @@
 		<Error Condition="'$(NexusZipPath)' == ''" Text="NexusZipPath was not resolved." />
 	</Target>
 
-	<Target Name="ReadPackageVersion" AfterTargets="Build" DependsOnTargets="InitializePackagePublishProperties">
+	<Target Name="ReadPackageVersion" AfterTargets="Build" DependsOnTargets="InitializePackageProperties">
 		<GetAssemblyIdentity AssemblyFiles="$(TargetPath)">
 			<Output TaskParameter="Assemblies" ItemName="_PackageAssemblyIdentity" />
 		</GetAssemblyIdentity>
@@ -84,6 +87,7 @@
 	</Target>
 
 	<Target Name="ZipThunderstore" AfterTargets="UpdateThunderstoreManifest">
+		<Copy SourceFiles="$(ProjectDir)README.md" DestinationFolder="$(ThunderstorePackageDir)" />
 		<ZipDirectory
 			SourceDirectory="$(ThunderstorePackageDir)"
 			DestinationFile="$(ThunderstoreZipPath)"
@@ -91,12 +95,12 @@
 	</Target>
 
 	<Target Name="RepackNexus" AfterTargets="ZipThunderstore">
+		<MakeDir Directories="$(NexusRepackDir)" />
 		<ItemGroup>
 			<NexusInputAssemblies Include="$(TargetPath)" />
 			<NexusInputAssemblies Include="$(OutputPath)AzuExtendedPlayerInventoryAPI.dll" />
 			<NexusInputAssemblies Include="$(OutputPath)ExtraSlotsAPI.dll" />
 			<NexusInputAssemblies Include="$(OutputPath)Newtonsoft.Json.dll" />
-			<NexusInputAssemblies Include="$(OutputPath)YamlDotNet.dll" />
 		</ItemGroup>
 
 		<ILRepack
@@ -104,7 +108,7 @@
 			DebugInfo="true"
 			Internalize="true"
 			InputAssemblies="@(NexusInputAssemblies)"
-			OutputFile="$(TargetPath)"
+			OutputFile="$(NexusRepackDllPath)"
 			TargetKind="SameAsPrimaryAssembly"
 			LibraryPath="$(OutputPath)" />
 	</Target>
@@ -113,20 +117,13 @@
 		<MakeDir Directories="$(NexusPackageContentDir)" />
 
 		<Copy
-			SourceFiles="$(TargetPath)"
+			SourceFiles="$(NexusRepackDllPath)"
 			DestinationFolder="$(NexusPackageContentDir)" />
 
 		<Message Text="Copied to nexus package folder: $(NexusPackageContentDir)" Importance="High" />
 	</Target>
 
-	<Target Name="UpdateNexusManifest" AfterTargets="CopyDLLNexus">
-		<Error Condition="!Exists('$(ProjectDir)UpdateNexusManifest.ps1')" Text="UpdateNexusManifest.ps1 was not found in $(ProjectDir)." />
-		<Error Condition="!Exists('$(NexusPackageDir)manifest.json')" Text="Nexus manifest was not found: $(NexusPackageDir)manifest.json" />
-
-		<Exec Command="powershell -ExecutionPolicy Bypass -NoProfile -File &quot;$(ProjectDir)UpdateNexusManifest.ps1&quot; -ManifestPath &quot;$(NexusPackageDir)manifest.json&quot; -Version &quot;$(PackageVersion)&quot; -Name &quot;$(EffectiveModName)&quot;" />
-	</Target>
-
-	<Target Name="ZipNexus" AfterTargets="UpdateNexusManifest">
+	<Target Name="ZipNexus" AfterTargets="CopyDLLNexus">
 		<ZipDirectory
 			SourceDirectory="$(NexusPackageContentDir)"
 			DestinationFile="$(NexusZipPath)"
