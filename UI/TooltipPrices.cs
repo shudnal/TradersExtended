@@ -250,7 +250,7 @@ namespace TradersExtended
             private static void Postfix() => Rebuild();
         }
 
-        [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetTooltip), new Type[] { typeof(ItemDrop.ItemData), typeof(int), typeof(bool), typeof(float), typeof(int) })]
+        [HarmonyPatch(typeof(ItemDrop.ItemData), nameof(ItemDrop.ItemData.GetTooltip), new Type[] { typeof(ItemDrop.ItemData), typeof(int), typeof(bool), typeof(float), typeof(int), typeof(bool) })]
         private static class ItemData_GetTooltip_AddTraderPrices
         {
             private struct ItemValueState
@@ -261,14 +261,17 @@ namespace TradersExtended
             }
 
             [HarmonyPriority(Priority.Last)]
-            private static void Prefix(ItemDrop.ItemData __0, int __1, out ItemValueState __state)
+            private static void Prefix(ItemDrop.ItemData __0, int __1, bool __5, out ItemValueState __state)
             {
                 __state = default;
                 if (__0?.m_shared == null)
                     return;
 
                 bool replaceValue = hideVanillaItemValue?.Value == true;
-                __state.Tooltip = GetTooltip(__0, __1, replaceValue, out int value);
+                int value = 0;
+                // Appended item statistics are part of the parent's tooltip, not a separate sale offer.
+                if (!__5)
+                    __state.Tooltip = GetTooltip(__0, __1, replaceValue, out value);
                 if (!replaceValue)
                     return;
 

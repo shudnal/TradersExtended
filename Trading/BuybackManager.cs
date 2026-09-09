@@ -11,6 +11,8 @@ namespace TradersExtended
     internal static class BuybackManager
     {
         private const string CustomDataKey = pluginID + ".Buyback";
+        private const int CurrentRecordVersion = 1;
+        private const int MaximumReceiptItems = 10000;
 
         [Serializable]
         private sealed class BuybackSaveData
@@ -23,6 +25,9 @@ namespace TradersExtended
         private sealed class BuybackRecord
         {
             public double createdAt;
+            public int dataVersion;
+            public SavedItem[] items;
+            // Legacy Inventory.Save payloads remain readable, but are not written for new receipts.
             public string itemData;
             // Older records stored one representative item rather than every removed stack.
             public int[] itemAmounts;
@@ -32,6 +37,120 @@ namespace TradersExtended
             public int amount;
             public int quality;
             public string currency;
+        }
+
+        // A receipt is not an inventory grid. Keep full-width quantities and exact metadata instead
+        // of inheriting the game's compact byte coordinates, ushort stacks and rounded durability.
+        [Serializable]
+        private sealed class SavedItem
+        {
+            public string prefab;
+            public int stack;
+            public int quality;
+            public int variant;
+            public float durability;
+            public int worldLevel;
+            public bool pickedUp;
+            public bool cheated;
+            public long crafterId;
+            public string crafterName;
+            public Dictionary<string, string> customData;
+
+            internal static SavedItem Capture(ItemDrop.ItemData item)
+            {
+                return new SavedItem
+                {
+                    prefab = TradeInventory.PrefabName(item),
+                    stack = item.m_stack,
+                    quality = item.m_quality,
+                    variant = item.m_variant,
+                    durability = item.m_durability,
+                    worldLevel = item.m_worldLevel,
+                    pickedUp = item.m_pickedUp,
+                    cheated = item.m_cheated,
+                    crafterId = item.m_crafterID,
+                    crafterName = item.m_crafterName,
+                    customData = new Dictionary<string, string>(item.m_customData)
+                };
+            }
+
+            internal void Validate()
+            {
+                if (string.IsNullOrWhiteSpace(prefab) || stack <= 0 || quality <= 0 || variant < 0 ||
+                    float.IsNaN(durability) || float.IsInfinity(durability))
+                    throw new InvalidOperationException("Invalid saved buyback item.");
+            }
+
+            internal ItemDrop.ItemData Restore()
+            {
+                Validate();
+                GameObject itemPrefab = ObjectDB.instance?.GetItemPrefab(prefab);
+                ItemDrop drop = itemPrefab != null ? itemPrefab.GetComponent<ItemDrop>() : null;
+                if (drop?.m_itemData?.m_shared == null)
+                    return null;
+                ItemDrop.ItemData item = drop.m_itemData.Clone();
+                item.m_dropPrefab = itemPrefab;
+                item.m_stack = stack;
+                item.m_quality = quality;
+                item.m_variant = variant;
+                item.m_durability = durability;
+                item.m_worldLevel = worldLevel;
+                item.m_pickedUp = pickedUp;
+                item.m_cheated = cheated;
+                item.m_crafterID = crafterId;
+                item.m_crafterName = crafterName ?? string.Empty;
+                item.m_customData = customData == null ? new Dictionary<string, string>() : new Dictionary<string, string>(customData);
+                item.m_equipped = false;
+                return item;
+            }
+        }
+
+        private static List<ItemDrop.ItemData> RestoreItems(BuybackRecord record)
+        {
+            if (record.dataVersion != 0 && record.dataVersion != CurrentRecordVersion)
+                return null; // A newer receipt format must not be silently discarded by an older build.
+            if (record.dataVersion == CurrentRecordVersion)
+            {
+                if (record.items == null || record.items.Length == 0 || record.items.Length > MaximumReceiptItems)
+                    throw new InvalidOperationException("Invalid buyback item count.");
+                List<ItemDrop.ItemData> restored = new List<ItemDrop.ItemData>(record.items.Length);
+                foreach (SavedItem saved in record.items)
+                {
+                    if (saved == null)
+                        throw new InvalidOperationException("Missing saved buyback item.");
+                    ItemDrop.ItemData item = saved.Restore();
+                    if (item == null)
+                        return null; // A temporarily missing mod prefab does not destroy its receipt.
+                    restored.Add(item);
+                }
+                return restored;
+            }
+
+            if (string.IsNullOrEmpty(record.itemData))
+                throw new InvalidOperationException("Missing legacy buyback data.");
+            int count = record.itemAmounts?.Length ?? 1;
+            if (count < 1 || count > MaximumReceiptItems)
+                throw new InvalidOperationException("Invalid legacy buyback stack count.");
+            Inventory inventory = new Inventory("Traders Extended buyback", null, count, 1);
+            bool previousForceDisableInit = ZNetView.m_forceDisableInit;
+            try { inventory.Load(new ZPackage(record.itemData)); }
+            finally { ZNetView.m_forceDisableInit = previousForceDisableInit; }
+            List<ItemDrop.ItemData> items = inventory.GetAllItems().OrderBy(item => item.m_gridPos.x).ToList();
+            if (items.Count != count)
+                return null;
+            if (record.itemAmounts != null)
+            {
+                for (int index = 0; index < count; index++)
+                {
+                    if (record.itemAmounts[index] <= 0)
+                        throw new InvalidOperationException("Invalid legacy buyback item amount.");
+                    items[index].m_stack = record.itemAmounts[index];
+                }
+            }
+            else
+                items[0].m_stack = record.itemType == StorePanel.ItemToSell.ItemType.Stack ? record.stack :
+                    record.itemType == StorePanel.ItemToSell.ItemType.Combined ? record.amount : items[0].m_stack;
+            return items;
         }
 
         private static BuybackSaveData cachedData;
@@ -62,39 +181,11 @@ namespace TradersExtended
 
             try
             {
-                if (record.price <= 0 || string.IsNullOrEmpty(record.itemData) ||
-                    double.IsNaN(record.createdAt) || double.IsInfinity(record.createdAt))
+                if (record.price <= 0 || double.IsNaN(record.createdAt) || double.IsInfinity(record.createdAt))
                     throw new InvalidOperationException("Invalid buyback record.");
-
-                int count = record.itemAmounts?.Length ?? 1;
-                if (count < 1 || count > 10000)
-                    throw new InvalidOperationException("Invalid buyback stack count.");
-
-                Inventory inventory = new Inventory("Traders Extended buyback", null, count, 1);
-                bool previousForceDisableInit = ZNetView.m_forceDisableInit;
-                try { inventory.Load(new ZPackage(record.itemData)); }
-                finally { ZNetView.m_forceDisableInit = previousForceDisableInit; }
-
-                List<ItemDrop.ItemData> items = inventory.GetAllItems().OrderBy(item => item.m_gridPos.x).ToList();
-                // A temporarily unavailable mod prefab must not erase the persisted receipt.
-                if (items.Count != count)
+                List<ItemDrop.ItemData> items = RestoreItems(record);
+                if (items == null)
                     return null;
-
-                if (record.itemAmounts != null)
-                {
-                    for (int index = 0; index < count; index++)
-                    {
-                        if (record.itemAmounts[index] <= 0)
-                            throw new InvalidOperationException("Invalid buyback item amount.");
-                        // Inventory.Load clamps to today's stack limit; keep the full sold quantity.
-                        items[index].m_stack = record.itemAmounts[index];
-                    }
-                }
-                else
-                {
-                    items[0].m_stack = record.itemType == StorePanel.ItemToSell.ItemType.Stack ? record.stack :
-                        record.itemType == StorePanel.ItemToSell.ItemType.Combined ? record.amount : items[0].m_stack;
-                }
                 long amount = items.Sum(item => (long)item.m_stack);
                 if (amount <= 0 || amount > int.MaxValue)
                     throw new InvalidOperationException("Invalid buyback total quantity.");
@@ -134,19 +225,12 @@ namespace TradersExtended
 
             try
             {
-                List<ItemDrop.ItemData> items = (item.soldItems ?? new List<ItemDrop.ItemData> { item.item })
-                    .Select(saved => saved.Clone()).ToList();
-                if (items.Count == 0 || items.Count > 10000 || items.Any(saved => saved.m_stack <= 0))
+                SavedItem[] items = (item.soldItems ?? new List<ItemDrop.ItemData> { item.item })
+                    .Select(SavedItem.Capture).ToArray();
+                if (items.Length == 0 || items.Length > MaximumReceiptItems)
                     throw new InvalidOperationException("Invalid buyback items.");
-                Inventory inventory = new Inventory("Traders Extended buyback", null, items.Count, 1);
-                for (int index = 0; index < items.Count; index++)
-                {
-                    items[index].m_equipped = false;
-                    items[index].m_gridPos = new Vector2i(index, 0);
-                    inventory.m_inventory.Add(items[index]);
-                }
-                ZPackage package = new ZPackage();
-                inventory.Save(package);
+                foreach (SavedItem saved in items)
+                    saved.Validate();
 
                 Dictionary<string, BuybackRecord> worldRecords = GetWorldRecords(create: true);
                 if (worldRecords == null)
@@ -155,8 +239,8 @@ namespace TradersExtended
                 worldRecords[TraderName(trader)] = new BuybackRecord
                 {
                     createdAt = GetWorldTime(),
-                    itemData = package.GetBase64(),
-                    itemAmounts = items.Select(saved => saved.m_stack).ToArray(),
+                    dataVersion = CurrentRecordVersion,
+                    items = items,
                     itemType = item.itemType,
                     stack = item.stack,
                     price = item.price,

@@ -42,36 +42,43 @@ namespace TradersExtended
         {
             storeGui = store;
 
-            amountDialog = UnityEngine.Object.Instantiate(InventoryGui.instance.m_splitPanel.gameObject, storeGui.m_rootPanel.transform.parent);
+            SplitDialog template = InventoryGui.instance.m_splitDialog;
+            SplitDialog clone = UnityEngine.Object.Instantiate(template, storeGui.m_rootPanel.transform.parent);
+            amountDialog = clone.gameObject;
             amountDialog.name = "AmountDialog";
             amountDialog.SetActive(false);
+            // OnEnable would reattach native listeners, overwrite the amount and reset the saved position.
+            clone.enabled = false;
 
-            Transform win_bkg = amountDialog.transform.Find("win_bkg");
-            dialogBackground = win_bkg.GetComponent<RectTransform>();
-            defaultDialogPosition = dialogBackground.anchoredPosition;
+            dialogBackground = clone.m_panel;
+            Transform win_bkg = dialogBackground.transform;
+            defaultDialogPosition = clone.m_panelNormalPosition != null
+                ? clone.m_panelNormalPosition.anchoredPosition : dialogBackground.anchoredPosition;
             previewDialogOffset = null;
 
-            sliderTitle = win_bkg.Find("Text").GetComponent<TMP_Text>();
-            sliderDialog = win_bkg.Find("Slider").GetComponent<Slider>();
-            sliderAmountText = win_bkg.Find("amount").GetComponent<TMP_Text>();
-            sliderImage = win_bkg.Find("Icon_bkg/Icon").GetComponent<Image>();
-            sliderButtonOk = win_bkg.Find("Button_ok/Text").GetComponent<TMP_Text>();
+            sliderTitle = clone.m_splitIconName;
+            sliderDialog = clone.m_splitSlider;
+            sliderAmountText = clone.m_splitAmount;
+            sliderImage = clone.m_splitIcon;
+            Button confirm = clone.m_splitOkButton;
+            Button cancel = clone.m_splitCancelButton;
+            sliderButtonOk = confirm.GetComponentInChildren<TMP_Text>(true);
 
-            Transform icon = win_bkg.Find("Icon_bkg");
-
-            GameObject sliderCoinsIcon = UnityEngine.Object.Instantiate(icon.gameObject, win_bkg);
-            sliderCoinsIcon.name = "Coins_bkg";
+            // Duplicate the referenced icon, without relying on the native prefab's child names.
+            Transform icon = sliderImage.transform;
+            GameObject sliderCoinsIcon = UnityEngine.Object.Instantiate(icon.gameObject, icon.parent);
+            sliderCoinsIcon.name = "AmountCurrencyIcon";
             sliderCoinsIcon.transform.SetSiblingIndex(icon.GetSiblingIndex() + 1);
-            sliderCurrencyImage = sliderCoinsIcon.transform.Find("Icon").GetComponent<Image>();
+            sliderCurrencyImage = sliderCoinsIcon.GetComponent<Image>();
             UpdateCurrencyIcon(storeGui.m_coinPrefab);
 
             RectTransform rtCoins = sliderCoinsIcon.GetComponent<RectTransform>();
-            rtCoins.anchorMax += new Vector2(0.15f, 0);
-            rtCoins.anchorMin += new Vector2(0.15f, 0);
-
+            rtCoins.SetParent(dialogBackground, true);
             RectTransform rtItem = icon.GetComponent<RectTransform>();
-            rtItem.anchorMax -= new Vector2(0.15f, 0);
-            rtItem.anchorMin -= new Vector2(0.15f, 0);
+            rtItem.SetParent(dialogBackground, true);
+            float iconOffset = dialogBackground.rect.width * 0.15f;
+            rtCoins.anchoredPosition += new Vector2(iconOffset, 0f);
+            rtItem.anchoredPosition -= new Vector2(iconOffset, 0f);
 
             GameObject sliderAmountCoins = UnityEngine.Object.Instantiate(sliderAmountText.gameObject, win_bkg);
             sliderAmountCoins.name = "amount_coins";
@@ -97,8 +104,6 @@ namespace TradersExtended
             sliderEqual.GetComponent<TMP_Text>().SetText("=");
 
             // The cloned panel must never call InventoryGui's inventory-splitting handlers.
-            Button confirm = win_bkg.Find("Button_ok").GetComponent<Button>();
-            Button cancel = win_bkg.Find("Button_cancel").GetComponent<Button>();
             DisablePersistentListeners(sliderDialog.onValueChanged);
             DisablePersistentListeners(confirm.onClick);
             DisablePersistentListeners(cancel.onClick);
@@ -312,7 +317,8 @@ namespace TradersExtended
             dialogTrader = storeGui.m_trader;
             sellOffer = isSellDialog ? StorePanel.selectedItem : null;
             buyOffer = isSellDialog ? null : storeGui.m_selectedItem;
-            if (!IsCurrentOffer() || (!isSellDialog && StorePanel.ItemToSell.IsBuyBackItem(buyOffer)))
+            if (!IsCurrentOffer() || (!isSellDialog &&
+                (StorePanel.ItemToSell.IsBuyBackItem(buyOffer) || StorePanel.HasPlayerKeyReward(buyOffer) || buyOffer.m_prefab == null)))
                 return;
 
             int maximum = GetMaximumLots();
@@ -358,7 +364,7 @@ namespace TradersExtended
             if (isSellDialog)
                 return StorePanel.TryGetSellQuote(sellOffer, lots, out amount, out price);
             return buyOffer != null && TradeAmounts.TryGetItemCount(lotSize, lots, out amount) &&
-                TradeAmounts.TryGetPrice(buyOffer.m_price, lots, 1d, out price);
+                StorePanel.TryGetBuyPrice(buyOffer, lots, out price);
         }
 
         private static void BuySelectedItem()

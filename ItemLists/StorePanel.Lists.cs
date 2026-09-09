@@ -282,7 +282,7 @@ namespace TradersExtended
                     if (item == null)
                         continue;
 
-                    if (string.IsNullOrEmpty(item.m_requiredGlobalKey) || ZoneSystem.instance.GetGlobalKey(item.m_requiredGlobalKey))
+                    if (IsBuyOfferAvailable(item))
                         result.Add(item);
                 }
             }
@@ -352,7 +352,8 @@ namespace TradersExtended
                 {
                     Trader.TradeItem tradeItem = result[i];
 
-                    if (tradeItem == null || tradeItem.m_price <= 0 || tradeItem.m_stack <= 0 || !ItemIsValid(tradeItem.m_prefab))
+                    if (!IsBuyOfferAvailable(tradeItem) ||
+                        (tradeItem.m_prefab != null && !ItemIsValid(tradeItem.m_prefab)))
                     {
                         result.RemoveAt(i);
                         continue;
@@ -360,7 +361,7 @@ namespace TradersExtended
 
                     if (filterEnabled)
                     {
-                        string itemName = Localization.instance.Localize(tradeItem.m_prefab.m_itemData.m_shared.m_name);
+                        string itemName = Localization.instance.Localize(GetBuyOfferName(tradeItem));
 
                         if (itemName.IndexOf(filterText, StringComparison.OrdinalIgnoreCase) < 0)
                         {
@@ -369,7 +370,7 @@ namespace TradersExtended
                         }
                     }
 
-                    if (TraderConfigManager.Get(trader).TradersUseFlexiblePricing)
+                    if (tradeItem.m_price > 0 && TraderConfigManager.Get(trader).TradersUseFlexiblePricing)
                     {
                         tradeItem = CloneTradeItem(tradeItem);
 
@@ -392,7 +393,15 @@ namespace TradersExtended
                     m_prefab = item.m_prefab,
                     m_stack = item.m_stack,
                     m_price = item.m_price,
-                    m_requiredGlobalKey = item.m_requiredGlobalKey
+                    m_requiredGlobalKey = item.m_requiredGlobalKey,
+                    m_icon = item.m_icon,
+                    m_name = item.m_name,
+                    m_tooltip = item.m_tooltip,
+                    m_buyKey = item.m_buyKey,
+                    m_incrementKey = item.m_incrementKey,
+                    m_incrementAmount = item.m_incrementAmount,
+                    m_buyPlayerEffects = item.m_buyPlayerEffects,
+                    m_levelUpEffect = item.m_levelUpEffect
                 };
                 TraderCurrency.CopyCurrency(item, clone);
                 return clone;
