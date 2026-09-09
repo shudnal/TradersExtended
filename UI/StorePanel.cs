@@ -220,7 +220,34 @@ namespace TradersExtended
                 first.m_requiredGlobalKey == second.m_requiredGlobalKey && first.m_buyKey == second.m_buyKey &&
                 first.m_incrementKey == second.m_incrementKey && first.m_incrementAmount == second.m_incrementAmount &&
                 first.m_name == second.m_name && first.m_icon == second.m_icon && first.m_tooltip == second.m_tooltip &&
+                first.m_levelUpEffect == second.m_levelUpEffect && SamePurchaseEffects(first.m_buyPlayerEffects, second.m_buyPlayerEffects) &&
                 SameCurrency(TraderCurrency.GetCurrency(first, StoreGui.instance), TraderCurrency.GetCurrency(second, StoreGui.instance));
+        }
+
+        private static bool SamePurchaseEffects(EffectList first, EffectList second)
+        {
+            if (ReferenceEquals(first, second))
+                return true;
+            EffectList.EffectData[] left = first?.m_effectPrefabs;
+            EffectList.EffectData[] right = second?.m_effectPrefabs;
+            int count = left?.Length ?? 0;
+            if (count != (right?.Length ?? 0))
+                return false;
+            for (int index = 0; index < count; index++)
+            {
+                EffectList.EffectData a = left[index];
+                EffectList.EffectData b = right[index];
+                if (ReferenceEquals(a, b))
+                    continue;
+                // Copies recreated by a list provider still identify the same behavioral offer.
+                if (a == null || b == null || a.m_prefab != b.m_prefab || a.m_enabled != b.m_enabled ||
+                    a.m_variant != b.m_variant || a.m_attach != b.m_attach || a.m_follow != b.m_follow ||
+                    a.m_inheritParentRotation != b.m_inheritParentRotation || a.m_inheritParentScale != b.m_inheritParentScale ||
+                    a.m_multiplyParentVisualScale != b.m_multiplyParentVisualScale || a.m_randomRotation != b.m_randomRotation ||
+                    a.m_scale != b.m_scale || a.m_childTransform != b.m_childTransform)
+                    return false;
+            }
+            return true;
         }
 
         // Prefer the same row when duplicate offers exist, then look for the same offer elsewhere.

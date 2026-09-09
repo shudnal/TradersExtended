@@ -334,7 +334,8 @@ namespace TradersExtended
                     copy.m_stack = amount;
                     // Target the planned slot instead of allowing native auto-stack to pick a
                     // shared-name lookalike with different saved properties.
-                    if (!inventory.AddItem(copy, amount, position.x, position.y))
+                    // This ItemData overload validates coordinates and has no world-drop fallback.
+                    if (!inventory.AddItem(copy, amount, position.x, position.y, skipValidPositionCheck: false))
                         return false;
                     remaining -= amount;
                 }

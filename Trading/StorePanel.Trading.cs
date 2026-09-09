@@ -100,7 +100,8 @@ namespace TradersExtended
             Player player = Player.m_localPlayer;
             return offer != null && player != null && offer.m_price >= 0 && !ItemToSell.IsBuyBackItem(offer) &&
                 (string.IsNullOrEmpty(offer.m_requiredGlobalKey) ||
-                    (ZoneSystem.instance != null && ZoneSystem.instance.GetGlobalKey(offer.m_requiredGlobalKey))) &&
+                    (ZoneSystem.instance != null && offer.m_requiredGlobalKey.Split(',')
+                        .Select(key => key.Trim()).Where(key => key.Length > 0).All(key => ZoneSystem.instance.GetGlobalKey(key)))) &&
                 (!HasPlayerKeyReward(offer) || !player.HaveUniqueKey(offer.m_buyKey)) &&
                 (offer.m_prefab != null ? offer.m_stack > 0 && offer.m_prefab.m_itemData?.m_shared != null : HasPlayerKeyReward(offer));
         }
