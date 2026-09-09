@@ -20,6 +20,7 @@ namespace TradersExtended
             private readonly List<ItemDrop.ItemData> items;
             private readonly int[] stacks;
             private readonly Vector2i[] positions;
+            private readonly bool[] cheated;
             private bool committed;
 
             internal Snapshot(Inventory inventory)
@@ -28,6 +29,7 @@ namespace TradersExtended
                 items = inventory.GetAllItems().ToList();
                 stacks = items.Select(item => item.m_stack).ToArray();
                 positions = items.Select(item => item.m_gridPos).ToArray();
+                cheated = items.Select(item => item.m_cheated).ToArray();
             }
 
             internal void Commit() => committed = true;
@@ -43,6 +45,7 @@ namespace TradersExtended
                 {
                     items[index].m_stack = stacks[index];
                     items[index].m_gridPos = positions[index];
+                    items[index].m_cheated = cheated[index];
                 }
                 inventory.Changed();
             }
@@ -125,8 +128,10 @@ namespace TradersExtended
         internal static bool PlanRemoval(Inventory inventory, IEnumerable<ItemDrop.ItemData> candidates, int amount, out List<Removal> plan)
         {
             plan = new List<Removal>();
-            if (inventory == null || amount <= 0)
+            if (inventory == null || amount < 0)
                 return false;
+            if (amount == 0)
+                return true;
             int remaining = amount;
             foreach (ItemDrop.ItemData item in candidates.Distinct())
             {
@@ -163,8 +168,23 @@ namespace TradersExtended
             }).ToList();
         }
 
+        internal static bool IsCheated(IEnumerable<Removal> plan) => plan.Any(part => part.Item.m_cheated);
+
+        internal static List<ItemDrop.ItemData> PrepareBuybackItems(IEnumerable<ItemDrop.ItemData> items, List<Removal> payment)
+        {
+            bool cheated = IsCheated(payment);
+            return items.Select(item =>
+            {
+                if (!cheated || item.m_cheated)
+                    return item;
+                ItemDrop.ItemData copy = item.Clone();
+                copy.m_cheated = true;
+                return copy;
+            }).ToList();
+        }
+
         // Call these methods inside a Snapshot. Valheim can partly add items and still return null/false.
-        internal static bool AddPrefab(Inventory inventory, ItemDrop prefab, int amount, int quality)
+        internal static bool AddPrefab(Inventory inventory, ItemDrop prefab, int amount, int quality, bool cheated)
         {
             if (prefab == null || amount <= 0 || Capacity(inventory, prefab.m_itemData, quality, Game.m_worldLevel) < amount)
                 return false;
@@ -172,7 +192,8 @@ namespace TradersExtended
             try
             {
                 return inventory.AddItem(Utils.GetPrefabName(prefab.gameObject), amount, quality,
-                    prefab.m_itemData.m_variant, 0L, string.Empty) != null;
+                    prefab.m_itemData.m_variant, 0L, string.Empty, new Vector2i(-1, -1), cheated,
+                    pickedUp: false, dropIfFullInv: false) != null;
             }
             finally
             {
@@ -195,7 +216,8 @@ namespace TradersExtended
                 existing.m_quality == saved.m_quality && existing.m_worldLevel == saved.m_worldLevel &&
                 existing.m_variant == saved.m_variant && existing.m_durability == saved.m_durability &&
                 existing.m_crafterID == saved.m_crafterID && existing.m_crafterName == saved.m_crafterName &&
-                existing.m_pickedUp == saved.m_pickedUp && existing.m_customData.Count == saved.m_customData.Count &&
+                existing.m_pickedUp == saved.m_pickedUp && existing.m_cheated == saved.m_cheated &&
+                existing.m_customData.Count == saved.m_customData.Count &&
                 existing.m_customData.All(pair => saved.m_customData.TryGetValue(pair.Key, out string value) && value == pair.Value);
         }
 

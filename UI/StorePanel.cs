@@ -217,7 +217,9 @@ namespace TradersExtended
         {
             return first != null && second != null && first.m_prefab == second.m_prefab &&
                 first.m_stack == second.m_stack && first.m_price == second.m_price &&
-                first.m_requiredGlobalKey == second.m_requiredGlobalKey &&
+                first.m_requiredGlobalKey == second.m_requiredGlobalKey && first.m_buyKey == second.m_buyKey &&
+                first.m_incrementKey == second.m_incrementKey && first.m_incrementAmount == second.m_incrementAmount &&
+                first.m_name == second.m_name && first.m_icon == second.m_icon && first.m_tooltip == second.m_tooltip &&
                 SameCurrency(TraderCurrency.GetCurrency(first, StoreGui.instance), TraderCurrency.GetCurrency(second, StoreGui.instance));
         }
 
@@ -732,7 +734,7 @@ namespace TradersExtended
 
                     bool isBuyback = ItemToSell.IsBuyBackItem(tradeItem);
 
-                    ItemDrop.ItemData itemData = isBuyback ? buybackItem.item : tradeItem.m_prefab.m_itemData;
+                    ItemDrop.ItemData itemData = isBuyback ? buybackItem.item : tradeItem.m_prefab?.m_itemData;
                     int price = isBuyback ? buybackItem.price : tradeItem.m_price;
                     TradeableItem.GetStackQualityFromStack(tradeItem.m_stack, out int stack, out int quality);
                     if (isBuyback)
@@ -763,27 +765,31 @@ namespace TradersExtended
                     int playerCurrency = TraderCurrency.GetPlayerCurrencyAmount(tradeItem, __instance);
                     bool available = price <= playerCurrency;
                     Image component = element.transform.Find("icon").GetComponent<Image>();
-                    component.sprite = itemData.GetIcon();
+                    component.sprite = !isBuyback && tradeItem.m_icon != null ? tradeItem.m_icon : itemData?.GetIcon();
                     ResolvedTraderConfig config = TraderConfigManager.Get(__instance.m_trader);
                     component.color = available ? (isBuyback ? config.BuybackItemHighlightedColor : Color.white) : new Color(1f, 0f, 1f, 0f);
-                    bool showNonTeleportable = !itemData.m_shared.m_teleportable &&
+                    bool showNonTeleportable = itemData != null && !itemData.m_shared.m_teleportable &&
                                                (ZoneSystem.instance == null || !ZoneSystem.instance.GetGlobalKey(GlobalKeys.TeleportAll));
                     SetNonTeleportableIcon(element, showNonTeleportable);
-                    string text = Localization.instance.Localize(itemData.m_shared.m_name);
+                    string name = isBuyback ? itemData.m_shared.m_name : GetBuyOfferName(tradeItem);
+                    string text = Localization.instance.Localize(name);
 
-                    if (quality > 1)
+                    if (itemData != null && quality > 1)
                         text += $" <color=#add8e6ff>({quality})</color>";
 
-                    if (stack > 1)
+                    if (itemData != null && stack > 1)
                         text += " x" + stack;
 
                     TMP_Text component2 = element.transform.Find("name").GetComponent<TMP_Text>();
                     component2.text = text;
                     component2.color = available ? (isBuyback ? config.BuybackItemFontColor : Color.white) : Color.grey;
 
-                    string tooltip = ItemDrop.ItemData.GetTooltip(itemData, quality == 0 ? itemData.m_quality : quality, crafting: false, itemData.m_worldLevel);
+                    string tooltip = !isBuyback && !string.IsNullOrEmpty(tradeItem.m_tooltip)
+                        ? Localization.instance.Localize(tradeItem.m_tooltip)
+                        : itemData == null ? string.Empty : ItemDrop.ItemData.GetTooltip(itemData,
+                            quality == 0 ? itemData.m_quality : quality, crafting: false, itemData.m_worldLevel);
 
-                    element.GetComponent<UITooltip>().Set(itemData.m_shared.m_name, tooltip, __instance.m_tooltipAnchor);
+                    element.GetComponent<UITooltip>().Set(name, tooltip, __instance.m_tooltipAnchor);
                     SetCurrencyIcon(element, currency);
                     TMP_Text component3 = Utils.FindChild(element.transform, "price").GetComponent<TMP_Text>();
                     component3.text = price.ToString();
@@ -836,7 +842,8 @@ namespace TradersExtended
                         TradeInventory.PlanRemoval(inventory,
                             inventory.GetAllItems().Where(existing => TradeInventory.MatchesCurrency(existing, receipt.currency)),
                             receipt.price, out payment);
-                    bool fits = affordable && TradeInventory.CanAddSavedItemsAfterRemoval(inventory, receipt.soldItems, payment);
+                    bool fits = affordable && TradeInventory.CanAddSavedItemsAfterRemoval(inventory,
+                        TradeInventory.PrepareBuybackItems(receipt.soldItems, payment), payment);
                     __instance.m_buyButton.interactable = affordable && fits;
                     __instance.m_buyButton.GetComponent<UITooltip>().m_text = affordable && fits ? string.Empty :
                         Localization.instance.Localize(affordable ? "$inventory_full" : "$msg_missingrequirement");
@@ -846,7 +853,8 @@ namespace TradersExtended
                 bool canBuy = GetMaximumBuyLots(__instance, item) > 0;
                 __instance.m_buyButton.interactable = canBuy;
                 __instance.m_buyButton.GetComponent<UITooltip>().m_text = canBuy ? string.Empty :
-                    Localization.instance.Localize(canAfford ? "$inventory_full" : "$msg_missingrequirement");
+                    Localization.instance.Localize(canAfford && TryGetIncrementedValue(item, Player.m_localPlayer, out _)
+                        ? "$inventory_full" : "$msg_missingrequirement");
             }
         }
     }
