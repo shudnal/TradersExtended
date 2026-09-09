@@ -226,7 +226,7 @@ namespace TradersExtended
                     result.Append(" (").Append(currencyName).Append(')');
             }
 
-            result.Append(": <color=orange>").Append(price.Price).Append("</color>");
+            result.Append(": <color=#ffa500ff>").Append(price.Price).Append("</color>");
             if (price.Stack > 1)
                 result.Append(" / x").Append(price.Stack);
             if (price.Quality > 0)
