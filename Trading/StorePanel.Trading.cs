@@ -92,8 +92,12 @@ namespace TradersExtended
 
         internal static bool HasPlayerKeyReward(Trader.TradeItem offer) => !string.IsNullOrEmpty(offer?.m_buyKey);
 
-        internal static string GetBuyOfferName(Trader.TradeItem offer) =>
-            offer?.m_prefab != null ? offer.m_prefab.m_itemData.m_shared.m_name : offer?.m_name ?? string.Empty;
+        internal static string GetBuyOfferName(Trader.TradeItem offer)
+        {
+            if (!string.IsNullOrWhiteSpace(offer?.m_name))
+                return offer.m_name;
+            return offer?.m_prefab != null ? offer.m_prefab.m_itemData?.m_shared?.m_name ?? string.Empty : string.Empty;
+        }
 
         private static bool IsBuyOfferAvailable(Trader.TradeItem offer)
         {
@@ -372,9 +376,9 @@ namespace TradersExtended
                     snapshot.Commit();
                 }
                 TraderCoins.UpdateTraderCoins(price);
+                store.m_trader.OnBought(offer);
                 if (offer.m_prefab != null)
                 {
-                    store.m_trader.OnBought(offer);
                     player.ShowPickupMessage(offer.m_prefab.m_itemData, amount);
                     Gogan.LogEvent("Game", "BoughtItem", offer.m_prefab.name, 0L);
                 }

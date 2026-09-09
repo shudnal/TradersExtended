@@ -328,7 +328,7 @@ namespace TradersExtended
             lotSize = isSellDialog ? StorePanel.GetSellLotSize(sellOffer) : TradeableItem.GetStackFromStack(buyOffer.m_stack);
             ItemDrop.ItemData item = isSellDialog ? sellOffer.item : buyOffer.m_prefab.m_itemData;
             ItemDrop currency = isSellDialog ? sellOffer.currency : TraderCurrency.GetCurrency(buyOffer, storeGui);
-            sliderTitleText = Localization.instance.Localize(item.m_shared.m_name);
+            sliderTitleText = Localization.instance.Localize(isSellDialog ? item.m_shared.m_name : StorePanel.GetBuyOfferName(buyOffer));
             ResolvedTraderConfig config = TraderConfigManager.Get(dialogTrader);
             if (config.TradersUseCoins && config.TradersUseFlexiblePricing)
                 sliderTitleText += StorePanel.GetPriceFactorString(
