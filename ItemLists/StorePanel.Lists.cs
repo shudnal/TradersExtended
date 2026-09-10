@@ -239,8 +239,7 @@ namespace TradersExtended
                 {
                     __result.Clear();
 
-                    if (!config.DisableVanillaItems)
-                        AddVanillaAvailableItems(__instance, __result);
+                    AddVanillaAvailableItems(__instance, __result, onlyPlayerKeyRewards: config.DisableVanillaItems);
                 }
                 else if (config.DisableVanillaItems)
                 {
@@ -268,7 +267,7 @@ namespace TradersExtended
                 return null;
             }
 
-            private static void AddVanillaAvailableItems(Trader trader, List<Trader.TradeItem> result)
+            private static void AddVanillaAvailableItems(Trader trader, List<Trader.TradeItem> result, bool onlyPlayerKeyRewards)
             {
                 List<Trader.TradeItem> vanillaItems = trader.m_items;
 
@@ -279,7 +278,8 @@ namespace TradersExtended
                 {
                     Trader.TradeItem item = vanillaItems[i];
 
-                    if (item == null)
+                    // Player-key upgrades have no equivalent in the configurable item lists.
+                    if (item == null || (onlyPlayerKeyRewards && !HasPlayerKeyReward(item)))
                         continue;
 
                     if (IsBuyOfferAvailable(item))
@@ -297,27 +297,10 @@ namespace TradersExtended
                 if (vanillaItems == null || vanillaItems.Count == 0)
                     return;
 
-                if (result.Count == vanillaItems.Count)
-                {
-                    bool sameItems = true;
-
-                    for (int i = 0; i < result.Count; i++)
-                    {
-                        if (!ReferenceEquals(result[i], vanillaItems[i]))
-                        {
-                            sameItems = false;
-                            break;
-                        }
-                    }
-
-                    if (sameItems)
-                    {
-                        result.Clear();
-                        return;
-                    }
-                }
-
-                HashSet<Trader.TradeItem> vanillaSet = new HashSet<Trader.TradeItem>(vanillaItems);
+                // Replace ordinary goods without hiding native progression purchases, including
+                // offers that grant a player key and deliver an item in the same transaction.
+                HashSet<Trader.TradeItem> vanillaSet = new HashSet<Trader.TradeItem>(
+                    vanillaItems.Where(item => !HasPlayerKeyReward(item)));
 
                 int writeIndex = 0;
 
