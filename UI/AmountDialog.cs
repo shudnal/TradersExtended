@@ -59,7 +59,7 @@ namespace TradersExtended
             // The visible heading is separate from the inactive Icon_bkg/res_name item label.
             sliderTitle = win_bkg.Find("Text").GetComponent<TMP_Text>();
             ConfigureDynamicText(sliderTitle, 18f);
-            sliderTitle.enableWordWrapping = false;
+            sliderTitle.textWrappingMode = TextWrappingModes.NoWrap;
             sliderTitle.SetText(string.Empty);
             clone.m_splitIconName.gameObject.SetActive(false);
             sliderDialog = clone.m_splitSlider;
@@ -95,8 +95,8 @@ namespace TradersExtended
             SetCenteredRect(sliderAmountCoinsText.rectTransform, new Vector2(columnOffset, amountY), amountSize);
             ConfigureDynamicText(sliderAmountText, 12f);
             ConfigureDynamicText(sliderAmountCoinsText, 12f);
-            sliderAmountText.enableWordWrapping = true;
-            sliderAmountCoinsText.enableWordWrapping = false;
+            sliderAmountText.textWrappingMode = TextWrappingModes.Normal;
+            sliderAmountCoinsText.textWrappingMode = TextWrappingModes.NoWrap;
 
             // res_name is inactive in the native prefab; cloning it also hid the equality sign.
             TMP_Text equal = UnityEngine.Object.Instantiate(sliderAmountText, win_bkg);
@@ -104,7 +104,7 @@ namespace TradersExtended
             SetCenteredRect(equal.rectTransform, new Vector2(0f, iconY), new Vector2(36f, itemIconGroup.sizeDelta.y));
             equal.enableAutoSizing = false;
             equal.fontSize = 32f;
-            equal.enableWordWrapping = false;
+            equal.textWrappingMode = TextWrappingModes.NoWrap;
             equal.SetText("=");
             equal.gameObject.SetActive(true);
 
