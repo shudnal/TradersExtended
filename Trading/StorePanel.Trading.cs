@@ -1,4 +1,4 @@
-using BepInEx;
+﻿using BepInEx;
 using GUIFramework;
 using HarmonyLib;
 using System;
@@ -59,8 +59,6 @@ namespace TradersExtended
         private static bool tradeInProgress;
         private static int requestedBuyLots = 1;
         private static ItemToSell buybackItem;
-        private static readonly System.Reflection.MethodInfo setInventorySizeMethod =
-            AccessTools.Method(typeof(Player), nameof(Player.SetInventorySize), new[] { typeof(int) });
 
         internal static int GetSellLotSize(ItemToSell offer)
         {
@@ -135,30 +133,7 @@ namespace TradersExtended
             if (next < int.MinValue || next > int.MaxValue)
                 return false;
             value = (int)next;
-            return offer.m_incrementKey != Player.InventoryRowsKey || CanApplyInventoryRows(player, value);
-        }
-
-        private static bool CanApplyInventoryRows(Player player, int rows)
-        {
-            if (player == null || InventoryGui.instance == null)
-                return false;
-
-            int currentRows = player.GetInventory().GetHeight();
-            bool extraSlotsHandlesResize = setInventorySizeMethod != null &&
-                Harmony.GetPatchInfo(setInventorySizeMethod)?.Prefixes.Any(patch => patch.owner == "shudnal.ExtraSlots") == true;
-            if (extraSlotsHandlesResize)
-            {
-                // ExtraSlots owns SetInventorySize and moves its resident slots itself. Its full
-                // inventory height includes hidden rows, which are not the purchased native rows.
-                currentRows = Humanoid.DefaultInventoryHeight;
-                if (player.TryGetUniqueKeyValue(Player.InventoryRowsKey, out string current) &&
-                    int.TryParse(current, out int nativeRows))
-                    currentRows = Mathf.Clamp(nativeRows, 0, 9);
-            }
-
-            // Without that override the native setter can drop out-of-bounds items, so retain
-            // the physical-height guard for vanilla and unknown inventory-size implementations.
-            return Mathf.Clamp(rows, 0, 9) >= currentRows;
+            return true;
         }
 
         private sealed class PlayerRewardSnapshot : IDisposable
