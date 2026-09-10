@@ -46,7 +46,7 @@ namespace TradersExtended
                 {
                     args.Context.AddString("Actions: editor - Open the configuration editor, save [json|yml|csv] - Save the full item list as JSON by default, itemlist - Save the filtered item list as CSV");
                 }
-            }, false, false, false, false, false, delegate
+            }, false, false, false, false, false, false, delegate
             {
                 return new List<string> { "editor", "save", "itemlist" };
             }, true, false);
@@ -58,7 +58,7 @@ namespace TradersExtended
 
                 TraderCoins.SetTraderCoins(args[1], args.TryParameterInt(2, TraderConfigManager.Get(args[1]).CoinsAfterReplenishmentMinimum));
                 return true;
-            }, true, false, true, false, false, delegate { return TraderCoins.GetTraderPrefabs(); }, true, false, true);
+            }, true, false, true, false, false, true, delegate { return TraderCoins.GetTraderPrefabs(); }, true, false, true);
         }
 
         private sealed class ObjectDbExportItem

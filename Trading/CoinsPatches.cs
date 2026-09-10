@@ -165,6 +165,9 @@ namespace TradersExtended
 
             public static void Postfix(Inventory __instance)
             {
+                if (__instance.m_temoraryInventory)
+                    return;
+
                 PatchCoinsInInventory(__instance);
             }
         }
@@ -173,8 +176,11 @@ namespace TradersExtended
         private static class Inventory_AddItem_ItemData_amount_x_y_PatchCoinsItemDataOnLoad
         {
             [HarmonyPriority(Priority.First)]
-            private static void Prefix(ItemDrop.ItemData item)
+            private static void Prefix(Inventory __instance, ItemDrop.ItemData item)
             {
+                if (__instance.m_temoraryInventory)
+                    return;
+
                 if (!IsCoins(item))
                     return;
 
