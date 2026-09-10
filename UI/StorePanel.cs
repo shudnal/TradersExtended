@@ -1,4 +1,4 @@
-using BepInEx;
+﻿using BepInEx;
 using GUIFramework;
 using HarmonyLib;
 using System;
@@ -37,6 +37,22 @@ namespace TradersExtended
         internal static ItemToSell selectedItem;
         private static bool sellPaneActive;
         private static int lastSellIndex;
+
+        private const float availabilityCacheSeconds = 1f;
+        private static Trader.TradeItem cachedBuyOffer;
+        private static Trader cachedBuyTrader;
+        private static int inventoryAvailabilityRevision;
+        private static int cachedBuyInventoryRevision = -1;
+        private static float nextBuyAvailabilityRefresh;
+        private static int cachedMaximumBuyLots;
+        private static bool cachedBuyAvailable;
+        private static string cachedBuyTooltip = string.Empty;
+
+        private static ItemToSell cachedSellOffer;
+        private static Trader cachedSellTrader;
+        private static int cachedSellInventoryRevision = -1;
+        private static float nextSellAvailabilityRefresh;
+        private static int cachedMaximumSellLots;
 
 
         private static Vector3 defaultStorePosition;
@@ -268,6 +284,105 @@ namespace TradersExtended
         {
             int lots = selectedItem?.itemType == ItemToSell.ItemType.Combined ? selectedItem.amount : 1;
             sellButton.interactable = TryGetSellQuote(selectedItem, lots, out _, out int price) && TraderCoins.CanSell(price);
+        }
+
+        internal static void InvalidateInventoryAvailability()
+        {
+            unchecked
+            {
+                inventoryAvailabilityRevision++;
+            }
+            nextBuyAvailabilityRefresh = 0f;
+            nextSellAvailabilityRefresh = 0f;
+            RepairPanel.InvalidateAvailability();
+        }
+
+        private static void RefreshBuyAvailability(StoreGui storeGui, Trader.TradeItem item)
+        {
+            cachedBuyOffer = item;
+            cachedBuyTrader = storeGui?.m_trader;
+            cachedBuyInventoryRevision = inventoryAvailabilityRevision;
+            nextBuyAvailabilityRefresh = Time.unscaledTime + availabilityCacheSeconds;
+            cachedMaximumBuyLots = 0;
+            cachedBuyAvailable = false;
+            cachedBuyTooltip = string.Empty;
+
+            if (storeGui == null || item == null)
+                return;
+
+            if (ItemToSell.IsBuyBackItem(item))
+            {
+                ItemToSell receipt = buybackItem;
+                Inventory inventory = Player.m_localPlayer?.GetInventory();
+                List<TradeInventory.Removal> payment = null;
+                bool affordable = receipt?.soldItems != null && receipt.currency != null && receipt.price > 0 && inventory != null &&
+                    TradeInventory.PlanRemoval(inventory,
+                        inventory.GetAllItems().Where(existing => TradeInventory.MatchesCurrency(existing, receipt.currency)),
+                        receipt.price, out payment);
+                bool fits = affordable && TradeInventory.CanAddSavedItemsAfterRemoval(inventory,
+                    TradeInventory.PrepareBuybackItems(receipt.soldItems, payment), payment);
+                cachedMaximumBuyLots = affordable && fits ? 1 : 0;
+                cachedBuyAvailable = cachedMaximumBuyLots > 0;
+                cachedBuyTooltip = cachedBuyAvailable ? string.Empty :
+                    Localization.instance.Localize(affordable ? "$inventory_full" : "$msg_missingrequirement");
+                return;
+            }
+
+            bool canAfford = storeGui.CanAfford(item);
+            cachedMaximumBuyLots = GetMaximumBuyLots(storeGui, item);
+            cachedBuyAvailable = cachedMaximumBuyLots > 0;
+            cachedBuyTooltip = cachedBuyAvailable ? string.Empty :
+                Localization.instance.Localize(canAfford && TryGetIncrementedValue(item, Player.m_localPlayer, out _)
+                    ? "$inventory_full" : "$msg_missingrequirement");
+        }
+
+        private static void EnsureBuyAvailability(StoreGui storeGui, Trader.TradeItem item)
+        {
+            if (!ReferenceEquals(cachedBuyOffer, item) || cachedBuyTrader != storeGui?.m_trader ||
+                cachedBuyInventoryRevision != inventoryAvailabilityRevision || Time.unscaledTime >= nextBuyAvailabilityRefresh)
+                RefreshBuyAvailability(storeGui, item);
+        }
+
+        internal static int GetMaximumBuyLotsCached(StoreGui storeGui, Trader.TradeItem item)
+        {
+            if (storeGui == null || item == null)
+                return 0;
+            EnsureBuyAvailability(storeGui, item);
+            return cachedMaximumBuyLots;
+        }
+
+        internal static int GetMaximumSellLotsCached(StoreGui storeGui, ItemToSell item)
+        {
+            if (storeGui == null || item == null)
+                return 0;
+            if (!ReferenceEquals(cachedSellOffer, item) || cachedSellTrader != storeGui.m_trader ||
+                cachedSellInventoryRevision != inventoryAvailabilityRevision || Time.unscaledTime >= nextSellAvailabilityRefresh)
+            {
+                cachedSellOffer = item;
+                cachedSellTrader = storeGui.m_trader;
+                cachedSellInventoryRevision = inventoryAvailabilityRevision;
+                nextSellAvailabilityRefresh = Time.unscaledTime + availabilityCacheSeconds;
+                cachedMaximumSellLots = GetMaximumSellLots(storeGui, item);
+            }
+            return cachedMaximumSellLots;
+        }
+
+        private static void UpdateBuyButtonCached(StoreGui storeGui)
+        {
+            if (storeGui?.m_buyButton == null)
+                return;
+
+            Trader.TradeItem item = storeGui.m_selectedItem;
+            if (item == null)
+            {
+                storeGui.m_buyButton.interactable = false;
+                storeGui.m_buyButton.GetComponent<UITooltip>().m_text = string.Empty;
+                return;
+            }
+
+            EnsureBuyAvailability(storeGui, item);
+            storeGui.m_buyButton.interactable = cachedBuyAvailable;
+            storeGui.m_buyButton.GetComponent<UITooltip>().m_text = cachedBuyTooltip;
         }
 
         internal static void UpdateCurrencyVisuals(StoreGui storeGui)
@@ -512,11 +627,11 @@ namespace TradersExtended
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.UpdateSellButton))]
         public static class StoreGui_UpdateSellButton_Patch
         {
-            private static void Postfix(StoreGui __instance)
+            private static bool Prefix(StoreGui __instance)
             {
                 UpdateSellButton();
-
                 RepairPanel.Update(__instance);
+                return false;
             }
         }
 
@@ -615,6 +730,9 @@ namespace TradersExtended
             private static bool Prefix(StoreGui __instance, List<GameObject> ___m_itemList)
             {
                 if (AmountDialog.IsOpen() || Console.IsVisible())
+                    return false;
+
+                if (!ZInput.GamepadActive)
                     return false;
 
                 if (ZInput.GetButtonDown("JoyButtonA") && ZInput.GetButton("JoyAltKeys"))
@@ -854,34 +972,24 @@ namespace TradersExtended
         [HarmonyPatch(typeof(StoreGui), nameof(StoreGui.UpdateBuyButton))]
         private static class StoreGui_UpdateBuyButton_Capacity
         {
-            private static void Postfix(StoreGui __instance)
+            private static bool Prefix(StoreGui __instance)
             {
-                Trader.TradeItem item = __instance.m_selectedItem;
-                if (item == null)
+                UpdateBuyButtonCached(__instance);
+                return false;
+            }
+        }
+
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.Changed))]
+        private static class Inventory_Changed_InvalidateTradeAvailability
+        {
+            [HarmonyPriority(Priority.Last)]
+            private static void Postfix(Inventory __instance)
+            {
+                if (__instance == null || __instance.m_temoraryInventory || Player.m_localPlayer == null ||
+                    __instance != Player.m_localPlayer.GetInventory())
                     return;
-                if (ItemToSell.IsBuyBackItem(item))
-                {
-                    // Preflight the cached receipt against the same post-payment state used by BuyBackItem.
-                    ItemToSell receipt = buybackItem;
-                    Inventory inventory = Player.m_localPlayer?.GetInventory();
-                    List<TradeInventory.Removal> payment = null;
-                    bool affordable = receipt?.soldItems != null && receipt.currency != null && receipt.price > 0 && inventory != null &&
-                        TradeInventory.PlanRemoval(inventory,
-                            inventory.GetAllItems().Where(existing => TradeInventory.MatchesCurrency(existing, receipt.currency)),
-                            receipt.price, out payment);
-                    bool fits = affordable && TradeInventory.CanAddSavedItemsAfterRemoval(inventory,
-                        TradeInventory.PrepareBuybackItems(receipt.soldItems, payment), payment);
-                    __instance.m_buyButton.interactable = affordable && fits;
-                    __instance.m_buyButton.GetComponent<UITooltip>().m_text = affordable && fits ? string.Empty :
-                        Localization.instance.Localize(affordable ? "$inventory_full" : "$msg_missingrequirement");
-                    return;
-                }
-                bool canAfford = __instance.CanAfford(item);
-                bool canBuy = GetMaximumBuyLots(__instance, item) > 0;
-                __instance.m_buyButton.interactable = canBuy;
-                __instance.m_buyButton.GetComponent<UITooltip>().m_text = canBuy ? string.Empty :
-                    Localization.instance.Localize(canAfford && TryGetIncrementedValue(item, Player.m_localPlayer, out _)
-                        ? "$inventory_full" : "$msg_missingrequirement");
+
+                InvalidateInventoryAvailability();
             }
         }
     }
