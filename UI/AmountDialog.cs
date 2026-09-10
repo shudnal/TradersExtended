@@ -1,4 +1,4 @@
-using HarmonyLib;
+﻿using HarmonyLib;
 using System;
 using TMPro;
 using UnityEngine;
@@ -344,7 +344,7 @@ namespace TradersExtended
 
         private static int GetMaximumLots()
         {
-            return isSellDialog ? StorePanel.GetMaximumSellLots(storeGui, sellOffer) : StorePanel.GetMaximumBuyLots(storeGui, buyOffer);
+            return isSellDialog ? StorePanel.GetMaximumSellLotsCached(storeGui, sellOffer) : StorePanel.GetMaximumBuyLotsCached(storeGui, buyOffer);
         }
 
         public static void Open()

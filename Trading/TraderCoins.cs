@@ -1,4 +1,4 @@
-using HarmonyLib;
+﻿using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -139,7 +139,9 @@ namespace TradersExtended
                 if (!StorePanel.IsOpen())
                     return;
 
-                playerCoins?.SetText(__instance.GetPlayerCoins().ToString());
+                // StoreGui.Update has just written the current player currency amount here.
+                // Copy that text before restoring this field to the trader balance instead of scanning inventory twice per frame.
+                playerCoins?.SetText(__instance.m_coinText.text);
 
                 if (GetCurrentConfig().TradersUseCoins)
                     traderCoins?.SetText(GetTraderCoins().ToString());
