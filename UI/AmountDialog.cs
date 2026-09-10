@@ -56,7 +56,12 @@ namespace TradersExtended
                 ? clone.m_panelNormalPosition.anchoredPosition : dialogBackground.anchoredPosition;
             previewDialogOffset = null;
 
-            sliderTitle = clone.m_splitIconName;
+            // The visible heading is separate from the inactive Icon_bkg/res_name item label.
+            sliderTitle = win_bkg.Find("Text").GetComponent<TMP_Text>();
+            ConfigureDynamicText(sliderTitle, 18f);
+            sliderTitle.enableWordWrapping = false;
+            sliderTitle.SetText(string.Empty);
+            clone.m_splitIconName.gameObject.SetActive(false);
             sliderDialog = clone.m_splitSlider;
             sliderAmountText = clone.m_splitAmount;
             sliderImage = clone.m_splitIcon;
@@ -64,44 +69,44 @@ namespace TradersExtended
             Button cancel = clone.m_splitCancelButton;
             sliderButtonOk = confirm.GetComponentInChildren<TMP_Text>(true);
 
-            // Duplicate the referenced icon, without relying on the native prefab's child names.
-            Transform icon = sliderImage.transform;
-            GameObject sliderCoinsIcon = UnityEngine.Object.Instantiate(icon.gameObject, icon.parent);
-            sliderCoinsIcon.name = "AmountCurrencyIcon";
-            sliderCoinsIcon.transform.SetSiblingIndex(icon.GetSiblingIndex() + 1);
-            sliderCurrencyImage = sliderCoinsIcon.GetComponent<Image>();
+            // Move the entire icon group, not just its Image, so no orphaned background remains.
+            RectTransform itemIconGroup = sliderImage.transform.parent as RectTransform;
+            RectTransform currencyIconGroup = UnityEngine.Object.Instantiate(itemIconGroup, win_bkg);
+            currencyIconGroup.name = "AmountCurrencyIcon";
+            currencyIconGroup.SetSiblingIndex(itemIconGroup.GetSiblingIndex() + 1);
+            sliderCurrencyImage = currencyIconGroup.Find(sliderImage.name).GetComponent<Image>();
             UpdateCurrencyIcon(storeGui.m_coinPrefab);
 
-            RectTransform rtCoins = sliderCoinsIcon.GetComponent<RectTransform>();
-            rtCoins.SetParent(dialogBackground, true);
-            RectTransform rtItem = icon.GetComponent<RectTransform>();
-            rtItem.SetParent(dialogBackground, true);
-            float iconOffset = dialogBackground.rect.width * 0.15f;
-            rtCoins.anchoredPosition += new Vector2(iconOffset, 0f);
-            rtItem.anchoredPosition -= new Vector2(iconOffset, 0f);
+            float columnOffset = dialogBackground.rect.width * 0.2f;
+            float iconY = itemIconGroup.anchoredPosition.y;
+            SetCenteredRect(itemIconGroup, new Vector2(-columnOffset, iconY), itemIconGroup.sizeDelta);
+            SetCenteredRect(currencyIconGroup, new Vector2(columnOffset, iconY), itemIconGroup.sizeDelta);
+            itemIconGroup.gameObject.SetActive(true);
+            currencyIconGroup.gameObject.SetActive(true);
 
-            GameObject sliderAmountCoins = UnityEngine.Object.Instantiate(sliderAmountText.gameObject, win_bkg);
-            sliderAmountCoins.name = "amount_coins";
-            sliderAmountCoins.transform.SetSiblingIndex(sliderAmountText.transform.GetSiblingIndex() + 1);
+            sliderAmountCoinsText = UnityEngine.Object.Instantiate(sliderAmountText, win_bkg);
+            sliderAmountCoinsText.name = "amount_coins";
+            sliderAmountCoinsText.transform.SetSiblingIndex(sliderAmountText.transform.GetSiblingIndex() + 1);
 
-            sliderAmountCoinsText = sliderAmountCoins.GetComponent<TMP_Text>();
-            
-            RectTransform rtCoinsAmount = sliderAmountText.GetComponent<RectTransform>();
-            rtCoinsAmount.anchorMax -= new Vector2(0.15f, 0);
-            rtCoinsAmount.anchorMin -= new Vector2(0.15f, 0);
+            // Each amount owns a separate column; long lot descriptions must not overlap the price.
+            Vector2 amountSize = new Vector2(columnOffset * 2f - 12f, sliderAmountText.rectTransform.sizeDelta.y);
+            float amountY = sliderAmountText.rectTransform.anchoredPosition.y;
+            SetCenteredRect(sliderAmountText.rectTransform, new Vector2(-columnOffset, amountY), amountSize);
+            SetCenteredRect(sliderAmountCoinsText.rectTransform, new Vector2(columnOffset, amountY), amountSize);
+            ConfigureDynamicText(sliderAmountText, 12f);
+            ConfigureDynamicText(sliderAmountCoinsText, 12f);
+            sliderAmountText.enableWordWrapping = true;
+            sliderAmountCoinsText.enableWordWrapping = false;
 
-            RectTransform rtItemAmount = sliderAmountCoins.GetComponent<RectTransform>();
-            rtItemAmount.anchorMax += new Vector2(0.15f, 0);
-            rtItemAmount.anchorMin += new Vector2(0.15f, 0);
-
-            GameObject sliderEqual = UnityEngine.Object.Instantiate(sliderTitle.gameObject, win_bkg);
-            sliderEqual.name = "equal";
-            sliderEqual.transform.SetSiblingIndex(sliderTitle.transform.GetSiblingIndex() + 1);
-
-            RectTransform rtEqual = sliderEqual.GetComponent<RectTransform>();
-            rtEqual.anchorMin -= new Vector2(0f, 0.5f);
-
-            sliderEqual.GetComponent<TMP_Text>().SetText("=");
+            // res_name is inactive in the native prefab; cloning it also hid the equality sign.
+            TMP_Text equal = UnityEngine.Object.Instantiate(sliderAmountText, win_bkg);
+            equal.name = "equal";
+            SetCenteredRect(equal.rectTransform, new Vector2(0f, iconY), new Vector2(36f, itemIconGroup.sizeDelta.y));
+            equal.enableAutoSizing = false;
+            equal.fontSize = 32f;
+            equal.enableWordWrapping = false;
+            equal.SetText("=");
+            equal.gameObject.SetActive(true);
 
             // The cloned panel must never call InventoryGui's inventory-splitting handlers.
             DisablePersistentListeners(sliderDialog.onValueChanged);
@@ -115,11 +120,44 @@ namespace TradersExtended
             confirm.onClick.AddListener(OnOkClick);
             cancel.onClick.AddListener(Close);
 
+            // Disabling SplitDialog does not disable persistent UnityEvent calls to its methods.
+            Button backgroundButton = amountDialog.transform.Find("CloseButton")?.GetComponent<Button>();
+            if (backgroundButton != null)
+            {
+                DisablePersistentListeners(backgroundButton.onClick);
+                backgroundButton.onClick.RemoveAllListeners();
+                backgroundButton.onClick.AddListener(OnBackgroundClick);
+            }
+
             StorePanel.DragHandle.Configure(StorePanel.DragHandle.CreateBackground(dialogBackground), dialogBackground, IsOpen,
                 GetPanelOffset, PreviewPanelOffset, CommitPanelOffset);
             SetPanelPosition();
 
             return amountDialog;
+        }
+
+        private static void SetCenteredRect(RectTransform rect, Vector2 position, Vector2 size)
+        {
+            rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = position;
+            rect.sizeDelta = size;
+        }
+
+        private static void ConfigureDynamicText(TMP_Text text, float minimumFontSize)
+        {
+            text.fontSizeMax = text.fontSize;
+            text.fontSizeMin = Mathf.Min(minimumFontSize, text.fontSizeMax);
+            text.enableAutoSizing = true;
+            text.alignment = TextAlignmentOptions.Center;
+            text.overflowMode = TextOverflowModes.Ellipsis;
+            text.raycastTarget = false;
+            text.gameObject.SetActive(true);
+        }
+
+        private static void OnBackgroundClick()
+        {
+            if (ZInput.IsTouchActive())
+                Close();
         }
 
         private static Vector2 GetPanelOffset() =>
@@ -335,6 +373,7 @@ namespace TradersExtended
                     isSellDialog ? sellOffer.priceFactor : TraderCoins.GetPriceFactor(buyPrice: true), reversed: !isSellDialog);
             sliderTitle.SetText(sliderTitleText);
             sliderButtonText = Localization.instance.Localize(isSellDialog ? "$store_sell" : "$store_buy");
+            sliderButtonOk.SetText(sliderButtonText);
             sliderDialog.minValue = 1f;
             sliderDialog.maxValue = maximum;
             sliderDialog.value = 1f;
@@ -344,6 +383,9 @@ namespace TradersExtended
             OnSplitSliderChanged();
             SetPanelPosition();
             amountDialog.SetActive(true);
+            // Apply dynamic labels after activation as well, before the first visible frame.
+            sliderTitle.SetText(sliderTitleText);
+            sliderButtonOk.SetText(sliderButtonText);
         }
 
         public static void OnSplitSliderChanged(float value = 0f)
