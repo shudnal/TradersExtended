@@ -84,7 +84,8 @@ namespace TradersExtended
 
         public static void PatchCoinsInInventory(Inventory inventory)
         {
-            if (inventory == null)
+            // Temporary migration inventories contain incomplete item data without SharedData.
+            if (inventory == null || inventory.m_temoraryInventory)
                 return;
             foreach (ItemDrop.ItemData item in inventory.GetAllItems())
                 PatchCoinsItemData(item);
