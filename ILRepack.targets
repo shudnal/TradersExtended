@@ -17,13 +17,6 @@
 
 			<ThunderstorePackageDir>$(ProjectDir)package\thunderstore\$(EffectiveModName)\</ThunderstorePackageDir>
 			<ThunderstoreZipPath>$(ProjectDir)package\thunderstore\$(EffectiveModName).zip</ThunderstoreZipPath>
-
-			<NexusRepackDir>$(TargetDir)nexus\</NexusRepackDir>
-			<NexusRepackDllPath>$(NexusRepackDir)$(TargetFileName)</NexusRepackDllPath>
-
-			<NexusPackageDir>$(ProjectDir)package\nexus\</NexusPackageDir>
-			<NexusPackageContentDir>$(ProjectDir)package\nexus\$(EffectiveModName)\</NexusPackageContentDir>
-			<NexusZipPath>$(ProjectDir)package\nexus\$(EffectiveModName).zip</NexusZipPath>
 		</PropertyGroup>
 
 		<Error Condition="'$(EffectiveModName)' == ''" Text="Mod name was not resolved. Set &lt;ModName&gt;TradersExtended&lt;/ModName&gt; in ILRepack.targets." />
@@ -31,9 +24,6 @@
 		<Error Condition="'$(ThunderstoreRepackDllPath)' == ''" Text="ThunderstoreRepackDllPath was not resolved." />
 		<Error Condition="'$(ThunderstorePackageDir)' == ''" Text="ThunderstorePackageDir was not resolved." />
 		<Error Condition="'$(ThunderstoreZipPath)' == ''" Text="ThunderstoreZipPath was not resolved." />
-		<Error Condition="'$(NexusPackageDir)' == ''" Text="NexusPackageDir was not resolved." />
-		<Error Condition="'$(NexusPackageContentDir)' == ''" Text="NexusPackageContentDir was not resolved." />
-		<Error Condition="'$(NexusZipPath)' == ''" Text="NexusZipPath was not resolved." />
 	</Target>
 
 	<Target Name="ReadPackageVersion" AfterTargets="Build" DependsOnTargets="InitializePackageProperties">
@@ -91,42 +81,6 @@
 		<ZipDirectory
 			SourceDirectory="$(ThunderstorePackageDir)"
 			DestinationFile="$(ThunderstoreZipPath)"
-			Overwrite="true" />
-	</Target>
-
-	<Target Name="RepackNexus" AfterTargets="ZipThunderstore">
-		<MakeDir Directories="$(NexusRepackDir)" />
-		<ItemGroup>
-			<NexusInputAssemblies Include="$(TargetPath)" />
-			<NexusInputAssemblies Include="$(OutputPath)AzuExtendedPlayerInventoryAPI.dll" />
-			<NexusInputAssemblies Include="$(OutputPath)ExtraSlotsAPI.dll" />
-			<NexusInputAssemblies Include="$(OutputPath)Newtonsoft.Json.dll" />
-		</ItemGroup>
-
-		<ILRepack
-			Parallel="true"
-			DebugInfo="true"
-			Internalize="true"
-			InputAssemblies="@(NexusInputAssemblies)"
-			OutputFile="$(NexusRepackDllPath)"
-			TargetKind="SameAsPrimaryAssembly"
-			LibraryPath="$(OutputPath)" />
-	</Target>
-
-	<Target Name="CopyDLLNexus" AfterTargets="RepackNexus">
-		<MakeDir Directories="$(NexusPackageContentDir)" />
-
-		<Copy
-			SourceFiles="$(NexusRepackDllPath)"
-			DestinationFolder="$(NexusPackageContentDir)" />
-
-		<Message Text="Copied to nexus package folder: $(NexusPackageContentDir)" Importance="High" />
-	</Target>
-
-	<Target Name="ZipNexus" AfterTargets="CopyDLLNexus">
-		<ZipDirectory
-			SourceDirectory="$(NexusPackageContentDir)"
-			DestinationFile="$(NexusZipPath)"
 			Overwrite="true" />
 	</Target>
 

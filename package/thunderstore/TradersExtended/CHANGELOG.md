@@ -1,18 +1,21 @@
+# 2.0.2
+* updated for Valheim 1.0.7
+* added support for the new trader progression purchases, including inventory expansion upgrades
+* fixed inventory expansion purchases when Extra Slots is installed
+* kept trader progression upgrades available when vanilla goods or other mods' trader items are hidden
+* updated the trade amount dialog to match the new Valheim interface
+* improved buyback persistence across relogs and temporary missing modded items
+* reduced stutter and repeated inventory checks while the trader window is open
+
 # 2.0.1
-* updated game API and amount-dialog integration for Valheim 1.0.7
-* preserved vanilla player-key purchases, inventory upgrades and purchase effects with custom currencies
-* kept native player-key upgrades visible when ordinary vanilla goods are disabled, including when other mods' offers are filtered
-* preserved item provenance during trading and rollback, and kept legacy buyback receipts readable with a lossless new receipt format
 * fixed the sell list losing selection after a sale
 * added whole-stack and multi-stack purchases and sales through the amount dialog
-* improved transaction safety, saved buyback items and configuration reload reliability
-* improved dedicated-server configuration editor access and large-file transfers
-* hidden trader price tooltips until the corresponding trader is discovered on the map
-* amount dialogs now require multiple available trade lots and show the current discount or markup
+* trader price information in item tooltips is hidden until the corresponding trader is discovered on the map
+* amount dialogs only open when more than one trade lot is available and show the current discount or markup
 * rounded sale prices down consistently in the list, amount preview and payment
-* added key-held dragging anywhere on the store and amount panels, with local offsets and an optional reset on store opening
-* localized item value and quality labels, with one detailed price entry per line and currency-aware labels
-* added an enabled-by-default local option to replace vanilla item values, using the native line for single common per-item coin prices and hiding unavailable values, including coins
+* added key-held dragging for the store and amount panels, with saved positions and an optional reset when opening a trader
+* localized item value and quality labels and show detailed trader prices one entry per line
+* added an enabled-by-default option to replace the vanilla item-value line with Traders Extended pricing
 
 # 2.0.0
 * added an in-game editor for trader settings and item lists, including dedicated-server administration, scalable windows and configurable gameplay input blocking

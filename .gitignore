@@ -363,8 +363,6 @@ MigrationBackup/
 FodyWeavers.xsd
 /thunderstore/TradersExtended/TradersExtended.dll
 /thunderstore/TradersExtended.zip
-/package/nexus/TradersExtended
-/package/nexus/TradersExtended.zip
 /package/thunderstore/TradersExtended/TradersExtended
 /package/thunderstore/TradersExtended.zip
 /package/thunderstore/TradersExtended/TradersExtended.dll
