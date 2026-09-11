@@ -344,6 +344,21 @@ When connected to a dedicated server, the editor requests access from the server
 
 The editor uses Valheim Profiler-style window behavior: monitor-aware GUI scaling, Valheim accessibility scaling, dragging, resizing from the right or bottom edge and the lower-right handle, a draggable separator between the file list and editor, and square scrollbars. `Prevent input` can be changed directly in the editor header and is also available as a local BepInEx setting. `Configuration editor shortcut`, window position and size, `Scale`, `Use Valheim GUI scaling`, `Font size`, `File list width`, `Show all items`, and `Visible item columns` are stored together in the local `Configuration editor` section. `Visible item columns` is a comma-separated list using the tokens `Prefab`, `Name`, `Stack`, `Price`, `Quality`, `Currency`, `RequiredGlobalKey`, `BlockedGlobalKey`, `RequiredPlayerKey`, and `BlockedPlayerKey`.
 
+## Valheim 1.0.7
+
+This revision targets Valheim 1.0.7. Game assembly references must point to matching 1.0.7 assemblies,
+including regenerated publicized assemblies; a pre-1.0 game DLL is not compatible with the updated API.
+
+Vanilla player-key offers, including inventory-row upgrades, remain available alongside physical items.
+Their names, icons, descriptions, one-time keys, increments and purchase effects are preserved through filtering
+and flexible-price copies. These offers are single purchases and never open the amount dialog, even when they
+also deliver an item. Key-only purchases do not require an empty inventory slot. Per-offer and per-trader
+currencies still determine payment. An inventory upgrade is refused if the native resize would shrink an
+already larger inventory; it must not drop items added by an inventory-expansion mod.
+
+The amount panel uses the game's new SplitDialog references, while its trade controls and saved position are
+managed independently from the native inventory-splitting component.
+
 ## Trading amounts
 
 Double-click a buy or sell row, or use the alternate gamepad action, to open the amount dialog. The slider counts
@@ -449,6 +464,16 @@ When the amount is omitted, that trader's configured replenishment minimum is us
 Buyback is stored separately for each trader. An item sold to one trader cannot be bought back from another trader.
 
 Buyback data is saved in the character's custom data and grouped by world identifier, so it survives logout and does not leak between worlds. Bulk sale receipts retain each sold stack rather than copying the metadata of one representative item. `Buyback lifetime in world seconds` controls expiration. Set it to `0` to keep buyback entries until they are replaced or purchased.
+
+New buyback receipts use a versioned item-data record rather than the game's compact inventory-grid serialization.
+This preserves full quantities, quality, variant, exact durability, crafter information, custom data and the
+item's cheated flag without truncating large row coordinates or stack sizes. Existing inventory-based receipts
+remain readable. A temporarily missing item prefab does not erase its receipt.
+
+Purchases and sale payouts inherit the cheated flag from the actual items consumed as payment or sold, matching
+the game's provenance model. Buyback preserves the sold flags and also accounts for its payment. Failed local
+inventory mutations restore stack flags as well as their original quantities and positions. Transactional item
+insertion does not use the new automatic drop-on-full fallback; explicit sale-payment overflow remains separate.
 
 ## Epic Loot compatibility
 

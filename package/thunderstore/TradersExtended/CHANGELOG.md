@@ -1,4 +1,8 @@
 # 2.0.1
+* updated game API and amount-dialog integration for Valheim 1.0.7
+* preserved vanilla player-key purchases, inventory upgrades and purchase effects with custom currencies
+* kept native player-key upgrades visible when ordinary vanilla goods are disabled, including when other mods' offers are filtered
+* preserved item provenance during trading and rollback, and kept legacy buyback receipts readable with a lossless new receipt format
 * fixed the sell list losing selection after a sale
 * added whole-stack and multi-stack purchases and sales through the amount dialog
 * improved transaction safety, saved buyback items and configuration reload reliability

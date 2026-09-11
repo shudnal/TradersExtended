@@ -2,6 +2,7 @@ using HarmonyLib;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Reflection;
 using UnityEngine;
 using static TradersExtended.TradersExtended;
 
@@ -83,7 +84,8 @@ namespace TradersExtended
 
         public static void PatchCoinsInInventory(Inventory inventory)
         {
-            if (inventory == null)
+            // Temporary migration inventories contain incomplete item data without SharedData.
+            if (inventory == null || inventory.m_temoraryInventory)
                 return;
             foreach (ItemDrop.ItemData item in inventory.GetAllItems())
                 PatchCoinsItemData(item);
@@ -153,21 +155,33 @@ namespace TradersExtended
             }
         }
 
-        [HarmonyPatch(typeof(Inventory), nameof(Inventory.Load))]
+        [HarmonyPatch]
         public class Inventory_Load_CoinsPatch
         {
+            private static IEnumerable<MethodBase> TargetMethods()
+            {
+                yield return AccessTools.Method(typeof(Inventory), nameof(Inventory.Load), new[] { typeof(ZPackage) });
+                yield return AccessTools.Method(typeof(Inventory), nameof(Inventory.Load), new[] { typeof(ZPackage), typeof(bool) });
+            }
+
             public static void Postfix(Inventory __instance)
             {
+                if (__instance.m_temoraryInventory)
+                    return;
+
                 PatchCoinsInInventory(__instance);
             }
         }
 
-        [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), typeof(ItemDrop.ItemData), typeof(int), typeof(int), typeof(int))]
+        [HarmonyPatch(typeof(Inventory), nameof(Inventory.AddItem), typeof(ItemDrop.ItemData), typeof(int), typeof(int), typeof(int), typeof(bool))]
         private static class Inventory_AddItem_ItemData_amount_x_y_PatchCoinsItemDataOnLoad
         {
             [HarmonyPriority(Priority.First)]
-            private static void Prefix(ItemDrop.ItemData item)
+            private static void Prefix(Inventory __instance, ItemDrop.ItemData item)
             {
+                if (__instance.m_temoraryInventory)
+                    return;
+
                 if (!IsCoins(item))
                     return;
 

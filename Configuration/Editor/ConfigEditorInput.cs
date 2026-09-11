@@ -584,7 +584,7 @@ namespace TradersExtended
             return new[]
             {
                 AccessTools.Method(typeof(InventoryGrid), nameof(InventoryGrid.OnLeftClick)),
-                AccessTools.Method(typeof(InventoryGrid), nameof(InventoryGrid.OnRightClick)),
+                AccessTools.Method(typeof(InventoryGrid), nameof(InventoryGrid.OnRightDown)),
                 AccessTools.Method(typeof(InventoryGui), nameof(InventoryGui.OnSelectedItem)),
                 AccessTools.Method(typeof(InventoryGui), nameof(InventoryGui.OnRightClickItem)),
                 AccessTools.Method(typeof(Toggle), nameof(Toggle.OnPointerClick)),

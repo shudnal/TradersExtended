@@ -29,8 +29,8 @@ namespace TradersExtended
             {
                 if (storeGui != null && storeGui.m_coinPrefab != null && storeGui.m_coinPrefab.name == CoinsPatches.itemNameCoins)
                     coinPrefab = storeGui.m_coinPrefab;
-                else if (ObjectDB.instance)
-                    coinPrefab = ObjectDB.instance.GetItemPrefab(CoinsPatches.itemNameCoins).GetComponent<ItemDrop>();
+                else if (ObjectDB.instance != null)
+                    coinPrefab = ObjectDB.instance.GetItemPrefab(CoinsPatches.itemNameCoins)?.GetComponent<ItemDrop>();
             }
         }
 
@@ -175,6 +175,7 @@ namespace TradersExtended
 
         internal static ItemDrop GetVanillaCurrency()
         {
+            CaptureVanillaCurrency(null);
             return coinPrefab;
         }
 

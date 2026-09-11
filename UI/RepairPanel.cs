@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using static ItemDrop;
@@ -16,6 +16,16 @@ namespace TradersExtended
         private static GameObject repairPanel;
         private static Button repairButton;
         private static EffectList repairItemDoneEffects;
+        private static bool availabilityDirty = true;
+        private static float nextAvailabilityRefresh;
+        private static Trader availabilityTrader;
+        private static bool cachedHaveRepairableItems;
+
+        internal static void InvalidateAvailability()
+        {
+            availabilityDirty = true;
+            nextAvailabilityRefresh = 0f;
+        }
 
         public static GameObject RepurposeSellButton(StoreGui storeGui)
         {
@@ -66,13 +76,29 @@ namespace TradersExtended
             if (repairPanel == null || repairButton == null)
                 return;
 
-            repairPanel.SetActive(TraderCanRepair(storeGui.m_trader));
-            repairButton.interactable = HaveRepairableItems(storeGui);
+            bool canRepair = TraderCanRepair(storeGui.m_trader);
+            repairPanel.SetActive(canRepair);
+            if (!canRepair)
+            {
+                repairButton.interactable = false;
+                return;
+            }
+
+            if (availabilityDirty || availabilityTrader != storeGui.m_trader || Time.unscaledTime >= nextAvailabilityRefresh)
+            {
+                availabilityDirty = false;
+                availabilityTrader = storeGui.m_trader;
+                nextAvailabilityRefresh = Time.unscaledTime + 1f;
+                cachedHaveRepairableItems = GetItemToRepair(storeGui) != null;
+            }
+
+            repairButton.interactable = cachedHaveRepairableItems;
         }
 
         public static void OnRepairPressed(StoreGui storeGui)
         {
             RepairOneItem(storeGui);
+            InvalidateAvailability();
             Update(storeGui);
         }
 
