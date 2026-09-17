@@ -1,3 +1,6 @@
+# 2.0.3
+* fixed gamepad stick input reaching the game and free-fly camera through Valheim 1.0.14 vector getters while the configuration editor blocks game input
+
 # 2.0.2
 * updated for Valheim 1.0.7
 * added support for the new trader progression purchases, including inventory expansion upgrades

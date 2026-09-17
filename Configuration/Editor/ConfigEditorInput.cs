@@ -797,6 +797,33 @@ namespace TradersExtended
         }
     }
 
+    [HarmonyPatch]
+    internal static class ZInputAllVectorBlockPatch
+    {
+        // Valheim 1.0.14 reads movement directly from vector stick getters, bypassing
+        // the scalar axis patches. Resolve them by name to keep older references usable.
+        private static readonly MethodBase[] StickMethods = typeof(ZInput)
+            .GetMethods(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)
+            .Where(method => method.ReturnType == typeof(Vector2)
+                && !method.ContainsGenericParameters
+                && method.GetParameters().Length == 0
+                && (method.Name == "GetJoyLeftStick" || method.Name == "GetJoyRightStick"))
+            .Cast<MethodBase>()
+            .ToArray();
+
+        // Older game versions have only scalar getters. Skip this optional patch when absent.
+        private static bool Prepare() => StickMethods.Length > 0;
+
+        private static IEnumerable<MethodBase> TargetMethods() => StickMethods;
+
+        [HarmonyPriority(Priority.Last)]
+        private static void Postfix(ref Vector2 __result)
+        {
+            if (ConfigEditorInputState.ShouldBlockAll)
+                __result = Vector2.zero;
+        }
+    }
+
     [HarmonyPatch(typeof(ZInput), nameof(ZInput.GetMouseScrollWheel))]
     internal static class ZInputMouseScrollBlockPatch
     {
