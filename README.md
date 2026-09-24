@@ -407,9 +407,11 @@ The amount dialog, affordability checks, list icons, sale payouts, buyback, and 
 
 ## Price tooltips
 
-`Item tooltips / Hide vanilla item value` is enabled by default and is local-only. With this setting enabled, an
-item with one applicable common per-item price in Coins and no other price records uses Valheim's native value
-line, including the stack total. The configured price is substituted only while generating the tooltip, and no
+`Item tooltips / Show trader prices` is enabled by default and is local-only. Disable it to leave Valheim's item
+value display unchanged and suppress all Traders Extended price rows. When trader prices are enabled,
+`Item tooltips / Hide vanilla item value` is also enabled by default and controls whether configured prices replace
+the vanilla value line. With this setting enabled, an item with one applicable common per-item price in Coins and
+no other price records uses Valheim's native value line, including the stack total. The configured price is substituted only while generating the tooltip, and no
 additional price section is appended. Trade lots, alternate currencies and totals outside the native integer range
 use detailed rows so their meaning is not lost in a per-item coin value.
 

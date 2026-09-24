@@ -264,7 +264,7 @@ namespace TradersExtended
             private static void Prefix(ItemDrop.ItemData __0, int __1, bool __5, out ItemValueState __state)
             {
                 __state = default;
-                if (__0?.m_shared == null)
+                if (__0?.m_shared == null || showTraderPricesInTooltips?.Value == false)
                     return;
 
                 bool replaceValue = hideVanillaItemValue?.Value == true;

@@ -23,7 +23,7 @@ namespace TradersExtended
     {
         public const string pluginID = "shudnal.TradersExtended";
         public const string pluginName = "Traders Extended";
-        public const string pluginVersion = "2.0.3";
+        public const string pluginVersion = "2.0.4";
 
         internal const string DefaultEditorGlobalKeys = "defeated_bonemass,defeated_gdking,defeated_goblinking,defeated_dragon,defeated_eikthyr,defeated_queen,defeated_fader,defeated_serpent,KilledTroll,killed_surtling,KilledBat,Hildir1,Hildir2,Hildir3";
         internal const string DefaultEditorPlayerKeys = "GP_Eikthyr,GP_TheElder,GP_Bonemass,GP_Moder,GP_Yagluth,GP_Queen,GP_Fader";
@@ -95,6 +95,7 @@ namespace TradersExtended
         internal static ConfigEntry<Vector2> storePanelOffset;
         internal static ConfigEntry<Vector2> amountDialogOffset;
         internal static ConfigEntry<bool> resetPanelPositionsOnOpen;
+        internal static ConfigEntry<bool> showTraderPricesInTooltips;
         internal static ConfigEntry<bool> hideVanillaItemValue;
 
         public static ConfigEntry<bool> enableBuyBack;
@@ -213,34 +214,36 @@ namespace TradersExtended
         private void ConfigInit()
         {
             configLocked = serverConfig("General", "Lock Configuration", true, "Configuration is locked and can be changed by server administrators only.");
-            loggingEnabled = config("General", "Logging enabled", false, "Enable diagnostic logging. [Not synchronized with server]", false);
-            configEditorShortcut = config("Configuration editor", "Configuration editor shortcut", new KeyboardShortcut(KeyCode.P, KeyCode.LeftControl), "Open or close the in-game Traders Extended configuration editor. [Not synchronized with server]", false);
-            configEditorWindowPosition = config("Configuration editor", "Configuration editor position", new Vector2(-1f, -1f), "Saved position of the configuration editor window. [Not synchronized with server]", false);
-            configEditorWindowSize = config("Configuration editor", "Configuration editor size", new Vector2(1500f, 850f), "Saved logical size of the configuration editor window. [Not synchronized with server]", false);
-            configEditorBlockGameInput = config("Configuration editor", "Block game input", true, "Block all Valheim gameplay input while the configuration editor is open. IMGUI input and the editor shortcut remain available. [Not synchronized with server]", false);
-            configEditorUseValheimGuiScale = config("Configuration editor", "Use Valheim GUI scaling", true, "Multiply the editor scale by Valheim's Accessibility - Scale GUI setting. [Not synchronized with server]", false);
-            configEditorUiScale = config("Configuration editor", "Scale", 1.0f, new ConfigDescription("Additional configuration editor UI scale. [Not synchronized with server]", new AcceptableValueRange<float>(0.6f, 2.0f)), false);
-            configEditorFontSize = config("Configuration editor", "Font size", 13, new ConfigDescription("Base configuration editor IMGUI font size. [Not synchronized with server]", new AcceptableValueRange<int>(9, 28)), false);
-            configEditorFileListWidth = config("Configuration editor", "File list width", 382f, new ConfigDescription("Logical width of the configuration file column. It can also be changed by dragging the column separator. [Not synchronized with server]", new AcceptableValueRange<float>(240f, 800f)), false);
-            configEditorShowAllItems = config("Configuration editor", "Show all items", false, "Show every ObjectDB item in item pickers. When disabled, hide AI equipment and invalid or non-user-facing items. [Not synchronized with server]", false);
-            configEditorVisibleItemColumns = config("Configuration editor", "Visible item columns", DefaultEditorVisibleItemColumns, "Comma-separated item editor columns to display: Prefab, Name, Stack, Price, Quality, Currency, RequiredGlobalKey, BlockedGlobalKey, RequiredPlayerKey and BlockedPlayerKey. [Not synchronized with server]", false);
-            configEditorGlobalKeys = config("Configuration editor", "Global keys", DefaultEditorGlobalKeys, "Comma-separated global keys available in the configuration editor. Custom keys can be added or removed in the picker; built-in keys remain protected. [Not synchronized with server]", false);
-            configEditorPlayerKeys = config("Configuration editor", "Player keys", DefaultEditorPlayerKeys, "Comma-separated player keys available in the configuration editor. Custom keys can be added or removed in the picker; built-in keys remain protected. [Not synchronized with server]", false);
+            loggingEnabled = config("General", "Logging enabled", false, "Enable diagnostic logging.", false);
+            configEditorShortcut = config("Configuration editor", "Configuration editor shortcut", new KeyboardShortcut(KeyCode.P, KeyCode.LeftControl), "Open or close the in-game Traders Extended configuration editor.", false);
+            configEditorWindowPosition = config("Configuration editor", "Configuration editor position", new Vector2(-1f, -1f), "Saved position of the configuration editor window.", false);
+            configEditorWindowSize = config("Configuration editor", "Configuration editor size", new Vector2(1500f, 850f), "Saved logical size of the configuration editor window.", false);
+            configEditorBlockGameInput = config("Configuration editor", "Block game input", true, "Block all Valheim gameplay input while the configuration editor is open. IMGUI input and the editor shortcut remain available.", false);
+            configEditorUseValheimGuiScale = config("Configuration editor", "Use Valheim GUI scaling", true, "Multiply the editor scale by Valheim's Accessibility - Scale GUI setting.", false);
+            configEditorUiScale = config("Configuration editor", "Scale", 1.0f, new ConfigDescription("Additional configuration editor UI scale.", new AcceptableValueRange<float>(0.6f, 2.0f)), false);
+            configEditorFontSize = config("Configuration editor", "Font size", 13, new ConfigDescription("Base configuration editor IMGUI font size.", new AcceptableValueRange<int>(9, 28)), false);
+            configEditorFileListWidth = config("Configuration editor", "File list width", 382f, new ConfigDescription("Logical width of the configuration file column. It can also be changed by dragging the column separator.", new AcceptableValueRange<float>(240f, 800f)), false);
+            configEditorShowAllItems = config("Configuration editor", "Show all items", false, "Show every ObjectDB item in item pickers. When disabled, hide AI equipment and invalid or non-user-facing items.", false);
+            configEditorVisibleItemColumns = config("Configuration editor", "Visible item columns", DefaultEditorVisibleItemColumns, "Comma-separated item editor columns to display: Prefab, Name, Stack, Price, Quality, Currency, RequiredGlobalKey, BlockedGlobalKey, RequiredPlayerKey and BlockedPlayerKey.", false);
+            configEditorGlobalKeys = config("Configuration editor", "Global keys", DefaultEditorGlobalKeys, "Comma-separated global keys available in the configuration editor. Custom keys can be added or removed in the picker; built-in keys remain protected.", false);
+            configEditorPlayerKeys = config("Configuration editor", "Player keys", DefaultEditorPlayerKeys, "Comma-separated player keys available in the configuration editor. Custom keys can be added or removed in the picker; built-in keys remain protected.", false);
 
             // Panel placement belongs to the local user, never to server configuration policy.
-            storePanelDragKey = Config.Bind("Store UI", "Drag key", new KeyboardShortcut(KeyCode.LeftAlt),
-                "Hold this key and drag anywhere on a store or amount panel with the left mouse button. [Not synchronized with server]");
-            storePanelOffset = Config.Bind("Store UI", "Store panel offset", Vector2.zero,
-                "Local store panel offset from its configured default position. Updated on drag release. [Not synchronized with server]");
-            amountDialogOffset = Config.Bind("Store UI", "Amount dialog offset", Vector2.zero,
-                "Local amount dialog offset from its default position. Updated on drag release. [Not synchronized with server]");
-            resetPanelPositionsOnOpen = Config.Bind("Store UI", "Reset panel positions on open", false,
-                "Reset both panel offsets whenever a new trader dialog is opened. [Not synchronized with server]");
+            storePanelDragKey = config("Store UI", "Drag key", new KeyboardShortcut(KeyCode.LeftAlt),
+                "Hold this key and drag anywhere on a store or amount panel with the left mouse button.", false);
+            storePanelOffset = config("Store UI", "Store panel offset", Vector2.zero,
+                "Local store panel offset from its configured default position. Updated on drag release.", false);
+            amountDialogOffset = config("Store UI", "Amount dialog offset", Vector2.zero,
+                "Local amount dialog offset from its default position. Updated on drag release.", false);
+            resetPanelPositionsOnOpen = config("Store UI", "Reset panel positions on open", false,
+                "Reset both panel offsets whenever a new trader dialog is opened.", false);
             storePanelOffset.SettingChanged += delegate { StorePanel.SetStoreGuiPosition(); };
             amountDialogOffset.SettingChanged += delegate { AmountDialog.SetPanelPosition(); };
 
-            hideVanillaItemValue = Config.Bind("Item tooltips", "Hide vanilla item value", true,
-                "Replace vanilla tooltip values with configured prices for discovered traders. A single common per-item coin price uses the vanilla value line; other prices use separate rows. Hide values for items without an available price, including coins. [Not synchronized with server]");
+            showTraderPricesInTooltips = config("Item tooltips", "Show trader prices", true,
+                "Show configured trader sell prices in item tooltips. Disable to leave item values unchanged and suppress all Traders Extended price rows.");
+            hideVanillaItemValue = config("Item tooltips", "Hide vanilla item value", true,
+                "Replace vanilla tooltip values with configured prices for discovered traders. A single common per-item coin price uses the vanilla value line; other prices use separate rows. Hide values for items without an available price, including coins.", false);
 
             checkForDiscovery = config("Item discovery", "Sell only discovered items", true, "A trader will not sell items that the buyer has not discovered.");
             checkForDiscoveryIgnoreItems = config("Item discovery", "Undiscovered items list to sell", "", "Comma-separated prefab names that bypass the discovery check. Vanilla trader items are included by default.");

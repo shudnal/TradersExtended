@@ -1,3 +1,6 @@
+# 2.0.4
+* added a local option to disable trader price information in item tooltips
+
 # 2.0.3
 * fixed gamepad stick input reaching the game and free-fly camera through Valheim 1.0.14 vector getters while the configuration editor blocks game input
 
