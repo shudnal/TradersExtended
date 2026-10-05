@@ -1,4 +1,4 @@
-using BepInEx;
+﻿using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using ConditionalConfigSync;
@@ -23,7 +23,7 @@ namespace TradersExtended
     {
         public const string pluginID = "shudnal.TradersExtended";
         public const string pluginName = "Traders Extended";
-        public const string pluginVersion = "2.0.4";
+        public const string pluginVersion = "2.0.5";
 
         internal const string DefaultEditorGlobalKeys = "defeated_bonemass,defeated_gdking,defeated_goblinking,defeated_dragon,defeated_eikthyr,defeated_queen,defeated_fader,defeated_serpent,KilledTroll,killed_surtling,KilledBat,Hildir1,Hildir2,Hildir3";
         internal const string DefaultEditorPlayerKeys = "GP_Eikthyr,GP_TheElder,GP_Bonemass,GP_Moder,GP_Yagluth,GP_Queen,GP_Fader";
@@ -190,6 +190,8 @@ namespace TradersExtended
 
             itemConfigs.ValueChanged -= StartConfigLoad;
             traderConfigFiles.ValueChanged -= TraderConfigManager.LoadSyncedConfigs;
+            if (configEditorBlockGameInput != null)
+                configEditorBlockGameInput.SettingChanged -= ConfigEditorInputState.OnBlockGameInputSettingChanged;
             BuybackManager.ResetCache();
             CoinsPatches.RestoreAll();
             configEditor?.Dispose();
@@ -219,6 +221,8 @@ namespace TradersExtended
             configEditorWindowPosition = config("Configuration editor", "Configuration editor position", new Vector2(-1f, -1f), "Saved position of the configuration editor window.", false);
             configEditorWindowSize = config("Configuration editor", "Configuration editor size", new Vector2(1500f, 850f), "Saved logical size of the configuration editor window.", false);
             configEditorBlockGameInput = config("Configuration editor", "Block game input", true, "Block all Valheim gameplay input while the configuration editor is open. IMGUI input and the editor shortcut remain available.", false);
+            ConfigEditorInputState.SetBlockGameInput(configEditorBlockGameInput.Value);
+            configEditorBlockGameInput.SettingChanged += ConfigEditorInputState.OnBlockGameInputSettingChanged;
             configEditorUseValheimGuiScale = config("Configuration editor", "Use Valheim GUI scaling", true, "Multiply the editor scale by Valheim's Accessibility - Scale GUI setting.", false);
             configEditorUiScale = config("Configuration editor", "Scale", 1.0f, new ConfigDescription("Additional configuration editor UI scale.", new AcceptableValueRange<float>(0.6f, 2.0f)), false);
             configEditorFontSize = config("Configuration editor", "Font size", 13, new ConfigDescription("Base configuration editor IMGUI font size.", new AcceptableValueRange<int>(9, 28)), false);

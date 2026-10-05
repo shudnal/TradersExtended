@@ -208,8 +208,6 @@ namespace TradersExtended
             ConfigEditorTransport.TransferProgress += OnTransferProgress;
         }
 
-        internal static bool IsOpenGlobal => configEditor != null && configEditor.IsOpen;
-
         internal bool IsOpen => isOpen;
 
         internal void MarkGameWindowReady() => scale.MarkGameWindowReady();
@@ -368,6 +366,7 @@ namespace TradersExtended
             ConfigEditorTransport.CancelPendingRequest();
             ConfigEditorTransport.ResponseReceived -= OnTransportResponse;
             ConfigEditorTransport.TransferProgress -= OnTransferProgress;
+            ConfigEditorInputState.SetEditorOpen(false);
             cursor.Release();
             theme.Shutdown();
         }
@@ -391,6 +390,7 @@ namespace TradersExtended
             ConfigEditorTransport.CancelPendingRequest();
             requestInProgress = false;
             isOpen = value;
+            ConfigEditorInputState.SetEditorOpen(value);
             if (value)
             {
                 targetRevision = ConfigEditorTransport.TargetRevision;

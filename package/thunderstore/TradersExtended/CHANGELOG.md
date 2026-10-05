@@ -1,3 +1,6 @@
+# 2.0.5
+* reduced unnecessary input checks while the configuration editor is closed
+
 # 2.0.4
 * added a local option to disable trader price information in item tooltips
 
