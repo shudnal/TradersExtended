@@ -114,7 +114,7 @@ namespace TradersExtended
             ItemDrop repairCurrency = TraderCurrency.GetCurrency(config.RepairCurrencyPrefab, storeGui);
             int availableCurrency = repairCurrency == null
                 ? 0
-                : TradeInventory.CountCurrency(Player.m_localPlayer.GetInventory(), repairCurrency);
+                : TradeInventory.CountSpendableCurrency(Player.m_localPlayer.GetInventory(), repairCurrency);
 
             if (item == null)
                 Player.m_localPlayer.Message(MessageHud.MessageType.Center, Player.m_localPlayer.GetPlayerName() + " $msg_doesnotneedrepair");
@@ -128,13 +128,12 @@ namespace TradersExtended
                 if (repairCost != 0)
                 {
                     Inventory inventory = Player.m_localPlayer.GetInventory();
-                    if (!TradeInventory.PlanRemoval(inventory,
-                        inventory.GetAllItems().Where(candidate => TradeInventory.MatchesCurrency(candidate, repairCurrency)),
-                        repairCost, out List<TradeInventory.Removal> payment))
+                    if (!TradeInventory.PlanPayment(inventory, repairCurrency, repairCost,
+                        out List<TradeInventory.Removal> payment, out int pocketAmount))
                         return;
                     using (TradeInventory.Snapshot snapshot = new TradeInventory.Snapshot(inventory))
                     {
-                        if (!TradeInventory.Remove(inventory, payment))
+                        if (!TradeInventory.SpendPayment(inventory, payment, repairCurrency, pocketAmount))
                             return;
                         snapshot.Commit();
                     }
