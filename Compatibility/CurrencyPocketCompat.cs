@@ -45,6 +45,7 @@ namespace TradersExtended.Compatibility
                 return false;
 
             player.m_customData[PlayerDataKey] = (balance - amount).ToString(CultureInfo.InvariantCulture);
+            StorePanel.InvalidateInventoryAvailability();
             return true;
         }
 
