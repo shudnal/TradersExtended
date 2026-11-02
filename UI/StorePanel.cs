@@ -316,9 +316,7 @@ namespace TradersExtended
                 Inventory inventory = Player.m_localPlayer?.GetInventory();
                 List<TradeInventory.Removal> payment = null;
                 bool affordable = receipt?.soldItems != null && receipt.currency != null && receipt.price > 0 && inventory != null &&
-                    TradeInventory.PlanRemoval(inventory,
-                        inventory.GetAllItems().Where(existing => TradeInventory.MatchesCurrency(existing, receipt.currency)),
-                        receipt.price, out payment);
+                    TradeInventory.PlanPayment(inventory, receipt.currency, receipt.price, out payment, out _);
                 bool fits = affordable && TradeInventory.CanAddSavedItemsAfterRemoval(inventory,
                     TradeInventory.PrepareBuybackItems(receipt.soldItems, payment), payment);
                 cachedMaximumBuyLots = affordable && fits ? 1 : 0;
