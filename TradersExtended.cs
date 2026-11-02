@@ -17,13 +17,14 @@ namespace TradersExtended
     [BepInDependency("_shudnal.ConditionalConfigSync", BepInDependency.DependencyFlags.HardDependency)]
     [BepInDependency("randyknapp.mods.epicloot", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("Azumatt.AzuExtendedPlayerInventory", BepInDependency.DependencyFlags.SoftDependency)]
+    [BepInDependency("Azumatt.CurrencyPocket", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInDependency("shudnal.ExtraSlots", BepInDependency.DependencyFlags.SoftDependency)]
     [BepInIncompatibility("randyknapp.mods.auga")]
     public partial class TradersExtended : BaseUnityPlugin
     {
         public const string pluginID = "shudnal.TradersExtended";
         public const string pluginName = "Traders Extended";
-        public const string pluginVersion = "2.0.5";
+        public const string pluginVersion = "2.0.6";
 
         internal const string DefaultEditorGlobalKeys = "defeated_bonemass,defeated_gdking,defeated_goblinking,defeated_dragon,defeated_eikthyr,defeated_queen,defeated_fader,defeated_serpent,KilledTroll,killed_surtling,KilledBat,Hildir1,Hildir2,Hildir3";
         internal const string DefaultEditorPlayerKeys = "GP_Eikthyr,GP_TheElder,GP_Bonemass,GP_Moder,GP_Yagluth,GP_Queen,GP_Fader";

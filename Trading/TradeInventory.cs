@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using TradersExtended.Compatibility;
 using UnityEngine;
 
 namespace TradersExtended
@@ -21,6 +22,9 @@ namespace TradersExtended
             private readonly int[] stacks;
             private readonly Vector2i[] positions;
             private readonly bool[] cheated;
+            private readonly Player pocketPlayer;
+            private readonly bool hadPocketCoins;
+            private readonly string savedPocketCoins;
             private bool committed;
 
             internal Snapshot(Inventory inventory)
@@ -30,6 +34,13 @@ namespace TradersExtended
                 stacks = items.Select(item => item.m_stack).ToArray();
                 positions = items.Select(item => item.m_gridPos).ToArray();
                 cheated = items.Select(item => item.m_cheated).ToArray();
+
+                if (CurrencyPocketCompat.IsInstalled && Player.m_localPlayer != null)
+                {
+                    pocketPlayer = Player.m_localPlayer;
+                    hadPocketCoins = pocketPlayer.m_customData.TryGetValue(CurrencyPocketCompat.PlayerDataKey, out string stored);
+                    savedPocketCoins = stored;
+                }
             }
 
             internal void Commit() => committed = true;
@@ -46,6 +57,17 @@ namespace TradersExtended
                     items[index].m_stack = stacks[index];
                     items[index].m_gridPos = positions[index];
                     items[index].m_cheated = cheated[index];
+                }
+                if (pocketPlayer != null)
+                {
+                    bool hasCurrent = pocketPlayer.m_customData.TryGetValue(CurrencyPocketCompat.PlayerDataKey, out string current);
+                    if (hadPocketCoins)
+                    {
+                        if (!hasCurrent || current != savedPocketCoins)
+                            pocketPlayer.m_customData[CurrencyPocketCompat.PlayerDataKey] = savedPocketCoins;
+                    }
+                    else if (hasCurrent)
+                        pocketPlayer.m_customData.Remove(CurrencyPocketCompat.PlayerDataKey);
                 }
                 inventory.Changed();
             }
@@ -67,6 +89,12 @@ namespace TradersExtended
             return inventory == null || currency == null ? 0 :
                 TradeAmounts.ClampBalance(inventory.GetAllItems().Where(item => MatchesCurrency(item, currency))
                     .Sum(item => (long)Math.Max(item.m_stack, 0)));
+        }
+
+        internal static int CountSpendableCurrency(Inventory inventory, ItemDrop currency)
+        {
+            return TradeAmounts.ClampBalance((long)CountCurrency(inventory, currency) +
+                CurrencyPocketCompat.GetStoredCoins(currency));
         }
 
         internal static int Capacity(Inventory inventory, ItemDrop.ItemData item, int quality, int worldLevel)
@@ -144,6 +172,34 @@ namespace TradersExtended
                     return true;
             }
             return false;
+        }
+
+        internal static bool PlanPayment(Inventory inventory, ItemDrop currency, int amount,
+            out List<Removal> payment, out int pocketAmount)
+        {
+            payment = new List<Removal>();
+            pocketAmount = 0;
+            if (inventory == null || currency == null || amount < 0)
+                return false;
+
+            // Only inventory stacks can release slots for a purchased item.
+            int physicalAmount = Math.Min(amount, CountCurrency(inventory, currency));
+            if (!PlanRemoval(inventory, inventory.GetAllItems().Where(item => MatchesCurrency(item, currency)),
+                physicalAmount, out payment))
+                return false;
+
+            pocketAmount = amount - physicalAmount;
+            return pocketAmount == 0 || CurrencyPocketCompat.GetStoredCoins(currency) >= pocketAmount;
+        }
+
+        internal static bool SpendPayment(Inventory inventory, List<Removal> payment, ItemDrop currency, int pocketAmount)
+        {
+            if (inventory == null || payment == null || pocketAmount < 0 ||
+                (pocketAmount > 0 && CurrencyPocketCompat.GetStoredCoins(currency) < pocketAmount))
+                return false;
+
+            // The caller's Snapshot restores both physical stacks and pocket coins on failure.
+            return Remove(inventory, payment) && CurrencyPocketCompat.TrySpend(currency, pocketAmount);
         }
 
         internal static bool Remove(Inventory inventory, List<Removal> plan)

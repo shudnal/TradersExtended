@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using TradersExtended.Compatibility;
 using UnityEngine;
 using static TradersExtended.TradersExtended;
 
@@ -134,7 +135,7 @@ namespace TradersExtended
                 return 0;
 
             ItemDrop currency = GetCurrency(tradeItem, storeGui);
-            return TradeInventory.CountCurrency(Player.m_localPlayer.GetInventory(), currency);
+            return TradeInventory.CountSpendableCurrency(Player.m_localPlayer.GetInventory(), currency);
         }
 
         internal static bool UsesStoreCurrency(Trader.TradeItem tradeItem, StoreGui storeGui)

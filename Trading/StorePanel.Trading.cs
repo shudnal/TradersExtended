@@ -179,7 +179,7 @@ namespace TradersExtended
             ItemDrop currency = TraderCurrency.GetCurrency(offer, store);
             if (currency == null)
                 return 0;
-            int currencyAmount = TradeInventory.CountCurrency(inventory, currency);
+            int currencyAmount = TradeInventory.CountSpendableCurrency(inventory, currency);
             int candidate = offer.m_price == 0 ? TradeAmounts.MaximumSliderLots :
                 Math.Min(TradeAmounts.MaximumSliderLots, currencyAmount / offer.m_price);
             if (HasPlayerKeyReward(offer))
@@ -199,9 +199,8 @@ namespace TradersExtended
             while (candidate > 0)
             {
                 if (!TryGetBuyPrice(offer, candidate, out int price) ||
-                    !TradeInventory.PlanRemoval(inventory,
-                        inventory.GetAllItems().Where(existing => TradeInventory.MatchesCurrency(existing, currency)),
-                        price, out List<TradeInventory.Removal> payment))
+                    !TradeInventory.PlanPayment(inventory, currency, price,
+                        out List<TradeInventory.Removal> payment, out _))
                     return 0;
 
                 int capacity = TradeInventory.CapacityAfterRemoval(inventory, item, quality, Game.m_worldLevel, payment);
@@ -345,8 +344,8 @@ namespace TradersExtended
                     return;
                 ItemDrop currency = TraderCurrency.GetCurrency(offer, store);
                 Inventory inventory = player.GetInventory();
-                if (!TradeInventory.PlanRemoval(inventory,
-                    inventory.GetAllItems().Where(item => TradeInventory.MatchesCurrency(item, currency)), price, out List<TradeInventory.Removal> payment))
+                if (!TradeInventory.PlanPayment(inventory, currency, price,
+                    out List<TradeInventory.Removal> payment, out int pocketAmount))
                     return;
                 bool cheated = TradeInventory.IsCheated(payment);
                 if (offer.m_prefab != null && quality == 0)
@@ -355,7 +354,7 @@ namespace TradersExtended
                 using (PlayerRewardSnapshot rewards = HasPlayerKeyReward(offer) ? new PlayerRewardSnapshot(player) : null)
                 {
                     // Payment always precedes physical delivery. A failed delivery cannot grant a player key.
-                    if (!TradeInventory.Remove(inventory, payment) ||
+                    if (!TradeInventory.SpendPayment(inventory, payment, currency, pocketAmount) ||
                         (offer.m_prefab != null && !TradeInventory.AddPrefab(inventory, offer.m_prefab, amount, quality, cheated)))
                         return;
                     if (HasPlayerKeyReward(offer))
@@ -399,16 +398,16 @@ namespace TradersExtended
             if (offer == null || offer.price <= 0 || offer.currency == null)
                 return false;
             Inventory inventory = Player.m_localPlayer.GetInventory();
-            if (!TradeInventory.PlanRemoval(inventory,
-                inventory.GetAllItems().Where(item => TradeInventory.MatchesCurrency(item, offer.currency)), offer.price,
-                out List<TradeInventory.Removal> payment))
+            if (!TradeInventory.PlanPayment(inventory, offer.currency, offer.price,
+                out List<TradeInventory.Removal> payment, out int pocketAmount))
                 return false;
             List<ItemDrop.ItemData> items = TradeInventory.PrepareBuybackItems(offer.soldItems, payment);
             if (!TradeInventory.CanAddSavedItemsAfterRemoval(inventory, items, payment))
                 return false;
             using (TradeInventory.Snapshot snapshot = new TradeInventory.Snapshot(inventory))
             {
-                if (!TradeInventory.Remove(inventory, payment) || !TradeInventory.AddSavedItems(inventory, items))
+                if (!TradeInventory.SpendPayment(inventory, payment, offer.currency, pocketAmount) ||
+                    !TradeInventory.AddSavedItems(inventory, items))
                     return false;
                 snapshot.Commit();
             }

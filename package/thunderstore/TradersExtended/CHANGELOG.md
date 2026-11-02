@@ -1,3 +1,6 @@
+# 2.0.6
+* added support for spending coins from CurrencyPocket on purchases, buyback and trader repairs
+
 # 2.0.5
 * reduced unnecessary input checks while the configuration editor is closed
 
